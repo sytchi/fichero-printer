@@ -17,7 +17,7 @@ def test_short_text_fills_standard_label():
     assert any(raster)
 
 
-def test_long_text_stays_on_one_line_and_still_fits(monkeypatch):
+def test_long_text_keeps_every_word(monkeypatch):
     draw_text = render.ImageDraw.ImageDraw.text
     calls = []
 
@@ -30,10 +30,11 @@ def test_long_text_stays_on_one_line_and_still_fits(monkeypatch):
     raster = render.render_text_raster(text, 240)
     assert len(raster) == 240 * 12
     assert any(raster)
-    assert calls == [text]
+    # The text may now be wrapped, but no word may be dropped or reordered.
+    assert " ".join(calls) == text
 
 
-def test_line_breaks_are_rendered_as_spaces(monkeypatch):
+def test_line_breaks_are_treated_as_word_separators(monkeypatch):
     draw_text = render.ImageDraw.ImageDraw.text
     calls = []
 
@@ -43,7 +44,7 @@ def test_line_breaks_are_rendered_as_spaces(monkeypatch):
 
     monkeypatch.setattr(render.ImageDraw.ImageDraw, "text", record_text)
     render.render_text_raster("Best before\nFriday", 240)
-    assert calls == ["Best before Friday"]
+    assert " ".join(calls) == "Best before Friday"
 
 
 def test_date_label_fits():
@@ -113,3 +114,55 @@ def test_margins_larger_than_the_label_are_rejected():
 def test_offset_larger_than_the_label_is_rejected():
     with pytest.raises(ValueError, match="no room"):
         render.render_text_raster("Kitchen", 240, offset_dots=500)
+
+
+def _drawn_lines(monkeypatch, text, label_rows=240, **kwargs):
+    draw_text = render.ImageDraw.ImageDraw.text
+    calls = []
+
+    def record_text(self, position, value, *args, **extra):
+        calls.append(value)
+        return draw_text(self, position, value, *args, **extra)
+
+    monkeypatch.setattr(render.ImageDraw.ImageDraw, "text", record_text)
+    raster = render.render_text_raster(text, label_rows, **kwargs)
+    # Only the lines drawn for the final, largest fitting size are of interest;
+    # the search draws nothing, so every recorded call belongs to the result.
+    return calls, raster
+
+
+def test_long_text_wraps_onto_several_lines(monkeypatch):
+    lines, raster = _drawn_lines(monkeypatch, "A considerably longer label name")
+    assert len(lines) > 1
+    assert " ".join(lines) == "A considerably longer label name"
+    assert len(raster) == 240 * 12
+
+
+def test_wrapping_can_be_limited_to_one_line(monkeypatch):
+    lines, _ = _drawn_lines(monkeypatch, "A considerably longer label name", max_lines=1)
+    assert lines == ["A considerably longer label name"]
+
+
+def test_wrapping_uses_a_larger_font_than_one_line():
+    wrapped = render.render_text_raster("A considerably longer label name", 240)
+    single = render.render_text_raster("A considerably longer label name", 240, max_lines=1)
+    # More ink means bigger letters on the same label.
+    assert sum(bin(byte).count("1") for byte in wrapped) > sum(bin(byte).count("1") for byte in single)
+
+
+def test_short_text_stays_on_one_line(monkeypatch):
+    lines, _ = _drawn_lines(monkeypatch, "Kitchen")
+    assert lines == ["Kitchen"]
+
+
+def test_wrapped_text_respects_margins():
+    raster = render.render_text_raster("A considerably longer label name", 240, margin_dots=8)
+    rows = _ink_rows(raster)
+    columns = _ink_columns(raster)
+    assert rows[0] >= 8 and rows[-1] <= 240 - 1 - 8
+    assert columns[0] >= 8 and columns[-1] <= render.PRINTHEAD_PX - 1 - 8
+
+
+def test_single_unbreakable_word_that_cannot_fit_is_rejected():
+    with pytest.raises(ValueError, match="cannot fit"):
+        render.render_text_raster("Unbreakable" * 40, 240)
