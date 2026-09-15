@@ -42,6 +42,26 @@ print_label:
           min: 1
           max: 100
           mode: box
+    margin_mm:
+      name: Margin (mm)
+      description: Blank border kept on every side of the label.
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.5
+          mode: box
+    offset_mm:
+      name: Offset (mm)
+      description: Shifts the text along the label; positive moves it towards the end.
+      default: 0
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 0.5
+          mode: box
 save_favorite:
   name: Save favorite
   description: Save label text as a shortcut on the dashboard card.

@@ -13,8 +13,16 @@ class FicheroPrinterCard extends HTMLElement {
   static getStubConfig() { return {}; }
   static getConfigForm() {
     return {
-      schema: [{ name: "entity", selector: { entity: { domain: "sensor", integration: "fichero_printer" } } }],
-      computeLabel: () => "Printer status entity",
+      schema: [
+        { name: "entity", selector: { entity: { domain: "sensor", integration: "fichero_printer" } } },
+        { name: "margin_mm", selector: { number: { min: 0, max: 5, step: 0.5, mode: "box" } } },
+        { name: "offset_mm", selector: { number: { min: -10, max: 10, step: 0.5, mode: "box" } } },
+      ],
+      computeLabel: (field) => ({
+        entity: "Printer status entity",
+        margin_mm: "Margin (mm)",
+        offset_mm: "Offset along the label (mm)",
+      }[field.name] || field.name),
     };
   }
 
@@ -54,6 +62,15 @@ class FicheroPrinterCard extends HTMLElement {
   _today() {
     const now = new Date();
     return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+  }
+
+  _printData(text) {
+    const data = { text, copies: this._copies };
+    const margin = Number(this._config?.margin_mm);
+    const offset = Number(this._config?.offset_mm);
+    if (Number.isFinite(margin)) data.margin_mm = margin;
+    if (Number.isFinite(offset)) data.offset_mm = offset;
+    return data;
   }
 
   _render() {
@@ -120,13 +137,13 @@ class FicheroPrinterCard extends HTMLElement {
       this._copies = Math.max(1, Math.min(100, Number(event.target.value) || 1));
     });
     root.getElementById("connection").onclick = () => this._call(this._connected ? "disconnect" : "connect");
-    root.getElementById("print").onclick = () => this._call("print_label", { text: this._text, copies: this._copies });
+    root.getElementById("print").onclick = () => this._call("print_label", this._printData(this._text));
     root.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
     root.getElementById("today").onclick = () => {
       const today = this._today();
       this._text = today;
       root.getElementById("text").value = today;
-      this._call("print_label", { text: today, copies: this._copies });
+      this._call("print_label", this._printData(today));
     };
     this._built = true;
   }
@@ -175,7 +192,7 @@ class FicheroPrinterCard extends HTMLElement {
       const print = document.createElement("button");
       print.className = "favorite-print";
       print.textContent = text;
-      print.onclick = () => this._call("print_label", { text: storedFavorites[index], copies: this._copies });
+      print.onclick = () => this._call("print_label", this._printData(storedFavorites[index]));
 
       const remove = document.createElement("button");
       remove.className = "remove";

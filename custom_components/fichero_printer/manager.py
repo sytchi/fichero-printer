@@ -23,6 +23,7 @@ from .const import (
     CONF_POWER_OFF_ON_DISCONNECT,
     CONF_STARTUP_DELAY,
     CONF_SWITCHBOT_ENTITY,
+    DEFAULT_MARGIN_MM,
     DEFAULT_STARTUP_DELAY,
 )
 from .render import render_text_raster
@@ -384,7 +385,13 @@ class FicheroManager:
             await self._send(data[offset : offset + 200])
             await asyncio.sleep(0.02)
 
-    async def async_print(self, text: str, copies: int) -> None:
+    async def async_print(
+        self,
+        text: str,
+        copies: int,
+        margin_mm: float = DEFAULT_MARGIN_MM,
+        offset_mm: float = 0.0,
+    ) -> None:
         text = text.strip()
         if not text:
             raise HomeAssistantError("Label text cannot be empty")
@@ -398,7 +405,12 @@ class FicheroManager:
                 raise HomeAssistantError("Printer disconnected before printing")
             try:
                 label_rows = self.entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM
-                raster = render_text_raster(text, label_rows)
+                raster = render_text_raster(
+                    text,
+                    label_rows,
+                    margin_dots=round(margin_mm * DOTS_PER_MM),
+                    offset_dots=round(offset_mm * DOTS_PER_MM),
+                )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)
                 for _ in range(copies):

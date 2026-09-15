@@ -345,3 +345,20 @@ def test_delete_missing_favorite_reports_error(manager_module, session):
         asyncio.run(manager.async_delete_favorite(index=4))
 
     manager._store.async_save.assert_not_awaited()
+
+
+def test_print_converts_millimetres_to_dots(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 30, "density": 2}
+    manager.client = client()
+    manager._send = AsyncMock(return_value=bytes([0x00]))
+    manager._send_chunked = AsyncMock()
+    captured = {}
+
+    def fake_render(text, rows, margin_dots=8, offset_dots=0):
+        captured.update(text=text, rows=rows, margin=margin_dots, offset=offset_dots)
+        return b""
+
+    manager_module.render_text_raster = fake_render
+    asyncio.run(manager.async_print("Salt", 1, margin_mm=1.5, offset_mm=-2))
+    assert captured == {"text": "Salt", "rows": 240, "margin": 12, "offset": -16}

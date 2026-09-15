@@ -15,6 +15,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CARD_URL,
+    DEFAULT_MARGIN_MM,
     DOMAIN,
     PLATFORMS,
     SERVICE_CONNECT,
@@ -28,7 +29,12 @@ from .manager import FicheroManager
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
-    {vol.Required("text"): cv.string, vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100))}
+    {
+        vol.Required("text"): cv.string,
+        vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+        vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
+        vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
+    }
 )
 SERVICE_SAVE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
 SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
@@ -62,7 +68,12 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
         await manager_for(call).async_disconnect()
 
     async def handle_print(call: ServiceCall) -> None:
-        await manager_for(call).async_print(call.data["text"], call.data["copies"])
+        await manager_for(call).async_print(
+            call.data["text"],
+            call.data["copies"],
+            call.data["margin_mm"],
+            call.data["offset_mm"],
+        )
 
     async def handle_save(call: ServiceCall) -> None:
         await manager_for(call).async_save_favorite(call.data["text"])
