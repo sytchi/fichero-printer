@@ -166,3 +166,57 @@ def test_wrapped_text_respects_margins():
 def test_single_unbreakable_word_that_cannot_fit_is_rejected():
     with pytest.raises(ValueError, match="cannot fit"):
         render.render_text_raster("Unbreakable" * 40, 240)
+
+
+def _drawn_calls(monkeypatch, text, label_rows=240, **kwargs):
+    draw_text = render.ImageDraw.ImageDraw.text
+    calls = []
+
+    def record_text(self, position, value, *args, **extra):
+        calls.append((value, extra.get("stroke_width", 0), extra.get("font") or (args[0] if args else None)))
+        return draw_text(self, position, value, *args, **extra)
+
+    monkeypatch.setattr(render.ImageDraw.ImageDraw, "text", record_text)
+    render.render_text_raster(text, label_rows, **kwargs)
+    return calls
+
+
+def test_date_is_printed_on_its_own_line_under_bold_text(monkeypatch):
+    calls = _drawn_calls(monkeypatch, "Gnocchi chorizo", date="10-08-2026")
+    values = [value for value, _, _ in calls]
+    assert values[-1] == "10-08-2026"
+    assert " ".join(values[:-1]) == "Gnocchi chorizo"
+    strokes = [stroke for _, stroke, _ in calls]
+    assert all(stroke == render.TITLE_STROKE for stroke in strokes[:-1])
+    assert strokes[-1] == 0
+
+
+def test_date_uses_a_smaller_font_than_the_text(monkeypatch):
+    calls = _drawn_calls(monkeypatch, "Gnocchi chorizo", date="10-08-2026")
+    title_font = calls[0][2]
+    date_font = calls[-1][2]
+    assert date_font.size < title_font.size
+
+
+def test_text_without_a_date_is_not_bold(monkeypatch):
+    calls = _drawn_calls(monkeypatch, "Gnocchi chorizo")
+    assert all(stroke == 0 for _, stroke, _ in calls)
+
+
+def test_date_alone_prints_as_a_plain_label(monkeypatch):
+    calls = _drawn_calls(monkeypatch, "", date="16-09-2026")
+    assert [value for value, _, _ in calls] == ["16-09-2026"]
+    assert all(stroke == 0 for _, stroke, _ in calls)
+
+
+def test_empty_text_without_a_date_is_rejected():
+    with pytest.raises(ValueError, match="cannot be empty"):
+        render.render_text_raster("   ", 240)
+
+
+def test_dated_label_respects_margins():
+    raster = render.render_text_raster("Gnocchi chorizo", 240, margin_dots=8, date="10-08-2026")
+    rows = _ink_rows(raster)
+    columns = _ink_columns(raster)
+    assert rows[0] >= 8 and rows[-1] <= 240 - 1 - 8
+    assert columns[0] >= 8 and columns[-1] <= render.PRINTHEAD_PX - 1 - 8

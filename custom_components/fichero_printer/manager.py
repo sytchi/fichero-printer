@@ -391,9 +391,11 @@ class FicheroManager:
         copies: int,
         margin_mm: float = DEFAULT_MARGIN_MM,
         offset_mm: float = 0.0,
+        date: str = "",
     ) -> None:
         text = text.strip()
-        if not text:
+        date = date.strip()
+        if not text and not date:
             raise HomeAssistantError("Label text cannot be empty")
         if not 1 <= copies <= 100:
             raise HomeAssistantError("Copies must be between 1 and 100")
@@ -410,6 +412,7 @@ class FicheroManager:
                     label_rows,
                     margin_dots=round(margin_mm * DOTS_PER_MM),
                     offset_dots=round(offset_mm * DOTS_PER_MM),
+                    date=date,
                 )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)

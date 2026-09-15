@@ -6,20 +6,24 @@ PRINTHEAD_PX = 96
 DOTS_PER_MM = 8
 DEFAULT_MARGIN_DOTS = DOTS_PER_MM
 DEFAULT_MAX_LINES = 3
+# The date is a footnote under the name, and the name is printed bold so it
+# stays readable on a shelf.
+DATE_SIZE_RATIO = 0.55
+TITLE_STROKE = 1
 
 
-def _line_width(draw, text: str, font) -> int:
-    bbox = draw.textbbox((0, 0), text, font=font)
+def _line_width(draw, text: str, font, stroke: int = 0) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
     return bbox[2] - bbox[0]
 
 
-def _wrap(draw, words: list[str], font, span: int, max_lines: int) -> list[str] | None:
+def _wrap(draw, words: list[str], font, span: int, max_lines: int, stroke: int) -> list[str] | None:
     """Greedily wrap words into at most max_lines lines no wider than span."""
     lines: list[str] = []
     current = ""
     for word in words:
         candidate = f"{current} {word}".strip()
-        if not current or _line_width(draw, candidate, font) <= span:
+        if not current or _line_width(draw, candidate, font, stroke) <= span:
             current = candidate
             continue
         lines.append(current)
@@ -29,17 +33,18 @@ def _wrap(draw, words: list[str], font, span: int, max_lines: int) -> list[str] 
     lines.append(current)
     if len(lines) > max_lines:
         return None
-    if any(_line_width(draw, line, font) > span for line in lines):
+    if any(_line_width(draw, line, font, stroke) > span for line in lines):
         return None
     return lines
 
 
-def _block_height(draw, lines: list[str], font, gap: int) -> int:
-    total = 0
-    for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font)
-        total += bbox[3] - bbox[1]
-    return total + gap * (len(lines) - 1)
+def _height(draw, text: str, font, stroke: int = 0) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
+    return bbox[3] - bbox[1]
+
+
+def _block_height(draw, lines: list[str], font, gap: int, stroke: int) -> int:
+    return sum(_height(draw, line, font, stroke) for line in lines) + gap * (len(lines) - 1)
 
 
 def render_text_raster(
@@ -48,6 +53,7 @@ def render_text_raster(
     margin_dots: int = DEFAULT_MARGIN_DOTS,
     offset_dots: int = 0,
     max_lines: int = DEFAULT_MAX_LINES,
+    date: str | None = None,
 ) -> bytes:
     """Fit text at the largest size that fits, wrapping onto up to max_lines.
 
@@ -56,11 +62,14 @@ def render_text_raster(
     short of the label edge; positive values move the text towards the end of
     the label. The shift is reserved before the text is sized, so text that
     fills the label can still move, and it is never printed past the margin.
+    `date` is printed in a smaller font on its own line under the text, which
+    is then printed bold.
     """
     # Pasted line breaks and repeated whitespace are ordinary word separators;
     # where the text breaks is decided by whatever gives the largest letters.
     words = text.split()
-    if not words:
+    date = (date or "").strip()
+    if not words and not date:
         raise ValueError("Text cannot be empty")
     max_lines = max(1, int(max_lines))
 
@@ -74,25 +83,43 @@ def render_text_raster(
 
     canvas = Image.new("1", (label_rows, PRINTHEAD_PX), 1)
     draw = ImageDraw.Draw(canvas)
+    if not words:
+        # A date on its own is just an ordinary one-line label.
+        words, date = date.split(), ""
+    stroke = TITLE_STROKE if date else 0
+
     best = None
     low, high = 6, min(PRINTHEAD_PX, span)
     while low <= high:
         size = (low + high) // 2
         font = ImageFont.load_default(size=size)
         gap = max(1, size // 6)
-        lines = _wrap(draw, words, font, span, max_lines)
-        if lines is not None and _block_height(draw, lines, font, gap) <= usable_height:
-            best = (font, lines, gap)
+        lines = _wrap(draw, words, font, span, max_lines, stroke)
+        if lines is None:
+            high = size - 1
+            continue
+        height = _block_height(draw, lines, font, gap, stroke)
+        date_font = None
+        if date:
+            date_font = ImageFont.load_default(size=max(6, round(size * DATE_SIZE_RATIO)))
+            if _line_width(draw, date, date_font) > span:
+                high = size - 1
+                continue
+            height += gap + _height(draw, date, date_font)
+        if height <= usable_height:
+            best = (font, lines, gap, date_font, height)
             low = size + 1
         else:
             high = size - 1
     if best is None:
         raise ValueError("Text cannot fit on this label")
 
-    font, lines, gap = best
-    boxes = [draw.textbbox((0, 0), line, font=font) for line in lines]
+    font, lines, gap, date_font, height = best
+    boxes = [draw.textbbox((0, 0), line, font=font, stroke_width=stroke) for line in lines]
+    date_box = draw.textbbox((0, 0), date, font=date_font) if date else None
     width = max(box[2] - box[0] for box in boxes)
-    height = _block_height(draw, lines, font, gap)
+    if date_box:
+        width = max(width, date_box[2] - date_box[0])
     start_row = margin_dots + (full_span - width) // 2 + offset_dots
     start_row = max(margin_dots, min(start_row, label_rows - margin_dots - width))
     # Rows leave the printer in the opposite order to the canvas x axis, so the
@@ -100,14 +127,22 @@ def render_text_raster(
     block_x = label_rows - 1 - start_row - width
     y = (PRINTHEAD_PX - height) // 2
     for line, box in zip(lines, boxes):
-        line_width = box[2] - box[0]
         draw.text(
-            (block_x + (width - line_width) // 2 - box[0], y - box[1]),
+            (block_x + (width - (box[2] - box[0])) // 2 - box[0], y - box[1]),
             line,
             font=font,
             fill=0,
+            stroke_width=stroke,
+            stroke_fill=0,
         )
         y += box[3] - box[1] + gap
+    if date_box:
+        draw.text(
+            (block_x + (width - (date_box[2] - date_box[0])) // 2 - date_box[0], y - date_box[1]),
+            date,
+            font=date_font,
+            fill=0,
+        )
     # Printer raster is 96 pixels wide and one row per dot along label length.
     rotated = canvas.rotate(90, expand=True)
     return bytes(byte ^ 0xFF for byte in rotated.tobytes())

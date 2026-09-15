@@ -8,6 +8,8 @@ class FicheroPrinterCard extends HTMLElement {
     this._hiddenFavorites = new Set();
     this._built = false;
     this._favoritesKey = null;
+    this._withDate = false;
+    this._date = new Date().toISOString().slice(0, 10);
   }
 
   static getStubConfig() { return {}; }
@@ -59,13 +61,14 @@ class FicheroPrinterCard extends HTMLElement {
     }
   }
 
-  _today() {
-    const now = new Date();
-    return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+  _printedDate() {
+    const [year, month, day] = (this._date || "").split("-");
+    return year && month && day ? `${day}-${month}-${year}` : "";
   }
 
   _printData(text) {
     const data = { text, copies: this._copies };
+    if (this._withDate) data.date = this._printedDate();
     const margin = Number(this._config?.margin_mm);
     const offset = Number(this._config?.offset_mm);
     if (Number.isFinite(margin)) data.margin_mm = margin;
@@ -104,6 +107,8 @@ class FicheroPrinterCard extends HTMLElement {
         button:disabled { opacity:.55; cursor:wait; }
         label { display:flex; align-items:center; gap:8px; color:var(--secondary-text-color); }
         input[type=number] { width:64px; padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); }
+        input[type=date] { padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
+        input[type=date]:disabled { opacity:.55; }
         .favorites { margin-top:16px; border-top:1px solid var(--divider-color); padding-top:14px; }
         .favorites-title { font-size:.9rem; color:var(--secondary-text-color); margin-bottom:8px; }
         .error { margin:12px 0; padding:10px 12px; color:var(--error-color,#db4437); background:color-mix(in srgb,var(--error-color,#db4437) 10%,transparent); border-radius:8px; }
@@ -121,8 +126,9 @@ class FicheroPrinterCard extends HTMLElement {
         <textarea id="text" maxlength="500" placeholder="Text for your label"></textarea>
         <div class="row">
           <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
+          <label><input id="with-date" type="checkbox"> Add date</label>
+          <input id="date" type="date">
           <button class="primary" id="print">Print</button>
-          <button class="date" id="today"></button>
           <button id="favorite">&#9734; Save favorite</button>
         </div>
         <div class="favorites" id="favorites" hidden>
@@ -139,12 +145,16 @@ class FicheroPrinterCard extends HTMLElement {
     root.getElementById("connection").onclick = () => this._call(this._connected ? "disconnect" : "connect");
     root.getElementById("print").onclick = () => this._call("print_label", this._printData(this._text));
     root.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
-    root.getElementById("today").onclick = () => {
-      const today = this._today();
-      this._text = today;
-      root.getElementById("text").value = today;
-      this._call("print_label", this._printData(today));
-    };
+    const date = root.getElementById("date");
+    date.value = this._date;
+    date.disabled = !this._withDate;
+    date.addEventListener("input", (event) => { this._date = event.target.value; });
+    const withDate = root.getElementById("with-date");
+    withDate.checked = this._withDate;
+    withDate.addEventListener("change", (event) => {
+      this._withDate = event.target.checked;
+      date.disabled = !this._withDate;
+    });
     this._built = true;
   }
 
@@ -159,8 +169,6 @@ class FicheroPrinterCard extends HTMLElement {
     const error = root.getElementById("error");
     error.textContent = state.attributes.last_error || "";
     error.hidden = !state.attributes.last_error;
-
-    root.getElementById("today").textContent = `\u{1F4C5} Print ${this._today()}`;
 
     const storedFavorites = Array.isArray(state.attributes.favorites) ? state.attributes.favorites : [];
     // Once HA publishes the shorter list, the optimistic hiding is no longer

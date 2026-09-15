@@ -30,10 +30,15 @@ print_label:
           integration: fichero_printer
     text:
       name: Text
-      required: true
+      description: Printed bold above the date; may be empty when a date is given.
       selector:
         text:
           multiline: true
+    date:
+      name: Date
+      description: Printed in a smaller font on its own line under the text.
+      selector:
+        text:
     copies:
       name: Copies
       default: 1
