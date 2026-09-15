@@ -10,11 +10,13 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ADDRESS,
+    CONF_AUTO_CONNECT,
     CONF_DENSITY,
     CONF_LABEL_LENGTH,
     CONF_POWER_OFF_ON_DISCONNECT,
     CONF_STARTUP_DELAY,
     CONF_SWITCHBOT_ENTITY,
+    DEFAULT_AUTO_CONNECT,
     DEFAULT_DENSITY,
     DEFAULT_LABEL_LENGTH,
     DEFAULT_STARTUP_DELAY,
@@ -49,6 +51,7 @@ class FicheroConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Required(CONF_DENSITY, default=DEFAULT_DENSITY): vol.In([0, 1, 2]),
                 vol.Required(CONF_POWER_OFF_ON_DISCONNECT, default=True): bool,
+                vol.Required(CONF_AUTO_CONNECT, default=DEFAULT_AUTO_CONNECT): bool,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)

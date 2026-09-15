@@ -11,7 +11,8 @@
           "startup_delay": "Seconds to wait after pressing",
           "label_length": "Label length (mm)",
           "density": "Print density",
-          "power_off_on_disconnect": "Press SwitchBot when disconnecting"
+          "power_off_on_disconnect": "Press SwitchBot when disconnecting",
+          "auto_connect": "Connect automatically whenever the printer is visible"
         }
       }
     }

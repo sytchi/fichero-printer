@@ -18,6 +18,7 @@ from homeassistant.helpers.storage import Store
 from .bluez import prefer_le
 from .const import (
     CONF_ADDRESS,
+    CONF_AUTO_CONNECT,
     CONF_DENSITY,
     CONF_LABEL_LENGTH,
     CONF_POWER_OFF_ON_DISCONNECT,
@@ -99,7 +100,12 @@ class FicheroManager:
 
                     # Only try to connect when the printer is already
                     # advertising. Never press the SwitchBot from the monitor.
-                    target = self._visible_printer()
+                    # Entries created before the option existed keep connecting.
+                    target = (
+                        self._visible_printer()
+                        if self.entry.data.get(CONF_AUTO_CONNECT, True)
+                        else None
+                    )
 
                     if target is not None:
                         async with self._operation_lock:

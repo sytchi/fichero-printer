@@ -9,10 +9,12 @@ CONF_STARTUP_DELAY = "startup_delay"
 CONF_LABEL_LENGTH = "label_length"
 CONF_DENSITY = "density"
 CONF_POWER_OFF_ON_DISCONNECT = "power_off_on_disconnect"
+CONF_AUTO_CONNECT = "auto_connect"
 
 DEFAULT_STARTUP_DELAY = 3.0
 DEFAULT_LABEL_LENGTH = 30
 DEFAULT_DENSITY = 2
+DEFAULT_AUTO_CONNECT = False
 
 SERVICE_CONNECT = "connect"
 SERVICE_DISCONNECT = "disconnect"

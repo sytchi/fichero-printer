@@ -345,3 +345,25 @@ def test_delete_missing_favorite_reports_error(manager_module, session):
         asyncio.run(manager.async_delete_favorite(index=4))
 
     manager._store.async_save.assert_not_awaited()
+
+
+@pytest.mark.parametrize(("data", "expected"), [
+    ({"auto_connect": False}, False),
+    ({"auto_connect": True}, True),
+    ({}, True),  # entries created before the option keep connecting
+])
+def test_monitor_connects_only_with_auto_connect(session, data, expected):
+    manager, target = session
+    manager.entry.data = data
+    manager._visible_printer = Mock(return_value=target)
+    manager._connect_to_printer = AsyncMock()
+
+    async def run():
+        task = asyncio.create_task(manager._connection_monitor())
+        await asyncio.sleep(0.05)
+        manager._monitor_stop.set()
+        await asyncio.wait_for(task, 1)
+
+    asyncio.run(run())
+    assert manager._connect_to_printer.await_count == (1 if expected else 0)
+    assert manager._visible_printer.called is expected
