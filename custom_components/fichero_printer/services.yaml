@@ -1,6 +1,6 @@
 connect:
   name: Connect
-  description: Press the configured SwitchBot and open a Bluetooth session.
+  description: Press the configured power button (if any) and open a Bluetooth session.
   fields:
     config_entry_id:
       name: Printer configuration
@@ -10,7 +10,7 @@ connect:
           integration: fichero_printer
 disconnect:
   name: Disconnect
-  description: Close Bluetooth and optionally press the configured SwitchBot to power off.
+  description: Press the configured power button to power off, or just close the Bluetooth session when none is configured.
   fields:
     config_entry_id:
       name: Printer configuration

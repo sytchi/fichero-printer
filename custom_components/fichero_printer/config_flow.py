@@ -38,7 +38,7 @@ class FicheroConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_NAME, default="Fichero D11s"): str,
                 vol.Optional(CONF_ADDRESS, default=""): str,
-                vol.Required(CONF_SWITCHBOT_ENTITY): selector.EntitySelector(
+                vol.Optional(CONF_SWITCHBOT_ENTITY): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain=["switch", "button", "input_button"])
                 ),
                 vol.Required(CONF_STARTUP_DELAY, default=DEFAULT_STARTUP_DELAY): vol.All(

@@ -179,9 +179,10 @@ class FicheroManager:
             try:
                 # Do this before waiting for the Bluetooth operation lock. The
                 # background monitor can hold that lock for several seconds.
-                self._set_status("powering_on")
-                await self._press_switchbot()
-                await asyncio.sleep(self.entry.data.get(CONF_STARTUP_DELAY, DEFAULT_STARTUP_DELAY))
+                if self.entry.data.get(CONF_SWITCHBOT_ENTITY):
+                    self._set_status("powering_on")
+                    await self._press_switchbot()
+                    await asyncio.sleep(self.entry.data.get(CONF_STARTUP_DELAY, DEFAULT_STARTUP_DELAY))
                 async with self._operation_lock:
                     if self.connected:
                         return
@@ -350,8 +351,8 @@ class FicheroManager:
         self._response.set()
 
     async def async_disconnect(self, power_off: bool = True) -> None:
-        """Press SwitchBot directly."""
-        if not power_off:
+        """Press the power button, or just release BLE when none is configured."""
+        if not power_off or not self.entry.data.get(CONF_SWITCHBOT_ENTITY):
             # Unloading must release BlueZ/proxy resources without pressing
             # the physical power button (which could turn the printer on).
             async with self._operation_lock:
