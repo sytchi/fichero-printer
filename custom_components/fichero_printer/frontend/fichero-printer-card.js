@@ -6,6 +6,8 @@ class FicheroPrinterCard extends HTMLElement {
     this._copies = 1;
     this._busy = false;
     this._hiddenFavorites = new Set();
+    this._built = false;
+    this._favoritesKey = null;
   }
 
   static getStubConfig() { return {}; }
@@ -28,12 +30,6 @@ class FicheroPrinterCard extends HTMLElement {
 
   getCardSize() { return 5; }
 
-  _escape(value) {
-    return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
-    })[char]);
-  }
-
   async _call(service, data = {}) {
     const state = this._hass.states[this._entityId];
     if (!state) return false;
@@ -55,33 +51,35 @@ class FicheroPrinterCard extends HTMLElement {
     }
   }
 
+  _today() {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+  }
+
   _render() {
     if (!this._hass || !this.shadowRoot) return;
     const state = this._entityId && this._hass.states[this._entityId];
     if (!state) {
       this.shadowRoot.innerHTML = `<ha-card><div class="missing">No Fichero printer status entity found.</div></ha-card>`;
+      this._built = false;
       return;
     }
-    const connected = state.attributes.connected === true;
-    const storedFavorites = Array.isArray(state.attributes.favorites) ? state.attributes.favorites : [];
-    // Once HA publishes the shorter list, the optimistic hiding is no longer
-    // needed. Until then it prevents a deleted favorite flashing back onscreen.
-    for (const favorite of this._hiddenFavorites) {
-      if (!storedFavorites.includes(favorite)) this._hiddenFavorites.delete(favorite);
-    }
-    const favorites = storedFavorites
-      .map((text, index) => ({ text, index }))
-      .filter(({ text }) => !this._hiddenFavorites.has(text));
-    const now = new Date();
-    const today = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
-    const disabled = this._busy ? "disabled" : "";
+    // The card is built once and then updated in place. Replacing innerHTML on
+    // every state change destroyed the textarea while the user was typing in
+    // it, which dropped focus and every keystroke after the next update.
+    if (!this._built) this._build();
+    this._update(state);
+  }
+
+  _build() {
     this.shadowRoot.innerHTML = `
       <style>
         ha-card { padding: 18px; }
         .heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
         h2 { font-size:1.25rem; margin:0; }
         .status { display:flex; align-items:center; gap:7px; color:var(--secondary-text-color); text-transform:capitalize; }
-        .dot { width:10px; height:10px; border-radius:50%; background:${connected ? "var(--success-color,#43a047)" : "var(--error-color,#db4437)"}; }
+        .dot { width:10px; height:10px; border-radius:50%; background:var(--error-color,#db4437); }
+        .dot.connected { background:var(--success-color,#43a047); }
         textarea { box-sizing:border-box; width:100%; min-height:76px; resize:vertical; border:1px solid var(--divider-color); border-radius:10px; padding:12px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
         .row { display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap; }
         button { cursor:pointer; border:0; border-radius:10px; padding:10px 14px; color:var(--primary-text-color); background:var(--secondary-background-color); font:inherit; font-weight:500; }
@@ -99,47 +97,102 @@ class FicheroPrinterCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="heading">
-          <div><h2>Fichero label printer</h2><div class="status"><span class="dot"></span>${this._escape(state.state)}</div></div>
-          <button id="connection" ${disabled}>${connected ? "Disconnect" : "Connect"}</button>
+          <div><h2>Fichero label printer</h2><div class="status"><span class="dot"></span><span id="status"></span></div></div>
+          <button id="connection"></button>
         </div>
-        ${state.attributes.last_error ? `<div class="error">${this._escape(state.attributes.last_error)}</div>` : ""}
-        <textarea id="text" maxlength="500" placeholder="Text for your label">${this._escape(this._text)}</textarea>
+        <div class="error" id="error" hidden></div>
+        <textarea id="text" maxlength="500" placeholder="Text for your label"></textarea>
         <div class="row">
-          <label>Labels <input id="copies" type="number" min="1" max="100" value="${this._copies}"></label>
-          <button class="primary" id="print" ${disabled}>Print</button>
-          <button class="date" id="today" ${disabled}>📅 Print ${today}</button>
-          <button id="favorite" ${disabled}>☆ Save favorite</button>
+          <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
+          <button class="primary" id="print">Print</button>
+          <button class="date" id="today"></button>
+          <button id="favorite">&#9734; Save favorite</button>
         </div>
-        ${favorites.length ? `<div class="favorites"><div class="favorites-title">Favorites — click to print</div>${favorites.map(({ text, index }) => `
-          <span class="favorite"><button class="favorite-print" data-index="${index}" ${disabled}>${this._escape(text)}</button><button class="remove" title="Remove favorite" aria-label="Remove ${this._escape(text)}" data-index="${index}" ${disabled}>×</button></span>
-        `).join("")}</div>` : ""}
+        <div class="favorites" id="favorites" hidden>
+          <div class="favorites-title">Favorites &mdash; click to print</div>
+          <div id="favorite-list"></div>
+        </div>
       </ha-card>`;
 
-    const text = this.shadowRoot.getElementById("text");
-    const copies = this.shadowRoot.getElementById("copies");
-    text.addEventListener("input", (event) => { this._text = event.target.value; });
-    copies.addEventListener("input", (event) => { this._copies = Math.max(1, Math.min(100, Number(event.target.value) || 1)); });
-    this.shadowRoot.getElementById("connection").onclick = () => this._call(connected ? "disconnect" : "connect");
-    this.shadowRoot.getElementById("print").onclick = () => this._call("print_label", { text: this._text, copies: this._copies });
-    this.shadowRoot.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
-    this.shadowRoot.getElementById("today").onclick = () => {
+    const root = this.shadowRoot;
+    root.getElementById("text").addEventListener("input", (event) => { this._text = event.target.value; });
+    root.getElementById("copies").addEventListener("input", (event) => {
+      this._copies = Math.max(1, Math.min(100, Number(event.target.value) || 1));
+    });
+    root.getElementById("connection").onclick = () => this._call(this._connected ? "disconnect" : "connect");
+    root.getElementById("print").onclick = () => this._call("print_label", { text: this._text, copies: this._copies });
+    root.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
+    root.getElementById("today").onclick = () => {
+      const today = this._today();
       this._text = today;
+      root.getElementById("text").value = today;
       this._call("print_label", { text: today, copies: this._copies });
     };
-    this.shadowRoot.querySelectorAll(".favorite-print").forEach((button) => {
-      button.onclick = () => this._call("print_label", { text: storedFavorites[Number(button.dataset.index)], copies: this._copies });
-    });
-    this.shadowRoot.querySelectorAll(".remove").forEach((button) => {
-      button.onclick = async (event) => {
+    this._built = true;
+  }
+
+  _update(state) {
+    const root = this.shadowRoot;
+    const connected = state.attributes.connected === true;
+    this._connected = connected;
+    root.getElementById("status").textContent = state.state;
+    root.querySelector(".dot").classList.toggle("connected", connected);
+    root.getElementById("connection").textContent = connected ? "Disconnect" : "Connect";
+
+    const error = root.getElementById("error");
+    error.textContent = state.attributes.last_error || "";
+    error.hidden = !state.attributes.last_error;
+
+    root.getElementById("today").textContent = `\u{1F4C5} Print ${this._today()}`;
+
+    const storedFavorites = Array.isArray(state.attributes.favorites) ? state.attributes.favorites : [];
+    // Once HA publishes the shorter list, the optimistic hiding is no longer
+    // needed. Until then it prevents a deleted favorite flashing back onscreen.
+    for (const favorite of this._hiddenFavorites) {
+      if (!storedFavorites.includes(favorite)) this._hiddenFavorites.delete(favorite);
+    }
+    const favorites = storedFavorites
+      .map((text, index) => ({ text, index }))
+      .filter(({ text }) => !this._hiddenFavorites.has(text));
+    const key = JSON.stringify(favorites);
+    if (key !== this._favoritesKey) {
+      this._favoritesKey = key;
+      this._buildFavorites(favorites, storedFavorites);
+    }
+
+    for (const button of root.querySelectorAll("button")) button.disabled = this._busy;
+  }
+
+  _buildFavorites(favorites, storedFavorites) {
+    const root = this.shadowRoot;
+    const list = root.getElementById("favorite-list");
+    root.getElementById("favorites").hidden = favorites.length === 0;
+    list.replaceChildren();
+    for (const { text, index } of favorites) {
+      const wrapper = document.createElement("span");
+      wrapper.className = "favorite";
+
+      const print = document.createElement("button");
+      print.className = "favorite-print";
+      print.textContent = text;
+      print.onclick = () => this._call("print_label", { text: storedFavorites[index], copies: this._copies });
+
+      const remove = document.createElement("button");
+      remove.className = "remove";
+      remove.title = "Remove favorite";
+      remove.setAttribute("aria-label", `Remove ${text}`);
+      remove.textContent = "×";
+      remove.onclick = async (event) => {
         event.stopPropagation();
-        const index = Number(button.dataset.index);
-        const favorite = storedFavorites[index];
         if (await this._call("delete_favorite", { index })) {
-          this._hiddenFavorites.add(favorite);
+          this._hiddenFavorites.add(text);
           this._render();
         }
       };
-    });
+
+      wrapper.append(print, remove);
+      list.append(wrapper);
+    }
   }
 }
 
