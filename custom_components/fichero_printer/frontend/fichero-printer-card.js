@@ -93,13 +93,21 @@ class FicheroPrinterCard extends HTMLElement {
     this._offsetMm = this._number(stored.offset_mm, this._number(this._config?.offset_mm, 0));
     // Bold is the default, so only an explicit false switches it off.
     this._bold = stored.bold !== false;
+    // Half typed labels survive a reload; the text is whatever was last in the
+    // box, not something the printer knows about.
+    if (typeof stored.text === "string") this._text = stored.text;
   }
 
   _saveLayout() {
     try {
       window.localStorage.setItem(
         this._layoutKey(),
-        JSON.stringify({ length_mm: this._lengthMm, offset_mm: this._offsetMm, bold: this._bold })
+        JSON.stringify({
+          length_mm: this._lengthMm,
+          offset_mm: this._offsetMm,
+          bold: this._bold,
+          text: this._text,
+        })
       );
     } catch (error) {
       // A private window refuses to store anything; the values still hold for
@@ -269,6 +277,7 @@ class FicheroPrinterCard extends HTMLElement {
     const root = this.shadowRoot;
     root.getElementById("text").addEventListener("input", (event) => {
       this._text = event.target.value;
+      this._saveLayout();
       this._schedulePreview();
     });
     root.getElementById("copies").addEventListener("input", (event) => {
@@ -325,6 +334,7 @@ class FicheroPrinterCard extends HTMLElement {
       this._schedulePreview();
     });
     this._restoreLayout();
+    root.getElementById("text").value = this._text;
     const boldBox = root.getElementById("bold");
     boldBox.checked = this._bold;
     boldBox.addEventListener("change", (event) => {
