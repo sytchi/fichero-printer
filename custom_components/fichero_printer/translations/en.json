@@ -1,4 +1,22 @@
 {
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fichero label printer settings",
+        "description": "These can be changed at any time; the printer reloads itself after saving.",
+        "data": {
+          "address": "Bluetooth address (optional)",
+          "switchbot_entity": "Power button press entity",
+          "startup_delay": "Seconds to wait after pressing the power button",
+          "label_length": "Label length (mm)",
+          "density": "Print density",
+          "power_off_on_disconnect": "Press the power button when disconnecting",
+          "ai_task_entity": "AI Task entity that picks label icons (optional)",
+          "ai_image_entity": "AI Task entity that draws label pictures (optional)"
+        }
+      }
+    }
+  },
   "config": {
     "step": {
       "user": {
