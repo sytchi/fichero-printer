@@ -87,17 +87,20 @@ def test_margin_keeps_the_label_edges_blank():
 def test_offset_moves_text_that_fills_the_label():
     centred = _ink_rows(render.render_text_raster("Kitchen", 240, offset_dots=0))
     shifted = _ink_rows(render.render_text_raster("Kitchen", 240, offset_dots=16))
-    # The font picked for the narrower span can differ by a pixel or two, so
-    # assert the direction and that the shift lands close to the 16 requested.
-    assert 14 <= shifted[0] - centred[0] <= 18
+    # Rows leave the printer right to left, so moving the print to the right
+    # lowers the row numbers. Text that already fills the label cannot travel
+    # the full distance - the reserved space narrows it instead - so assert the
+    # direction and that the printed band really moved.
+    assert (shifted[0] + shifted[-1]) / 2 < (centred[0] + centred[-1]) / 2 - 4
+    assert shifted[-1] < centred[-1]
 
 
 def test_offset_moves_short_text_both_ways():
     centred = _ink_rows(render.render_text_raster("A", 240, offset_dots=0))
-    later = _ink_rows(render.render_text_raster("A", 240, offset_dots=16))
-    earlier = _ink_rows(render.render_text_raster("A", 240, offset_dots=-16))
-    assert later[0] - centred[0] == 16
-    assert earlier[0] - centred[0] == -16
+    rightwards = _ink_rows(render.render_text_raster("A", 240, offset_dots=16))
+    leftwards = _ink_rows(render.render_text_raster("A", 240, offset_dots=-16))
+    assert rightwards[0] - centred[0] == -16
+    assert leftwards[0] - centred[0] == 16
 
 
 def test_offset_never_prints_past_the_margin():

@@ -117,8 +117,8 @@ def render_label_image(
 
     `margin_dots` is the blank border kept on every side. `offset_dots` shifts
     the text along the label to compensate for a printer whose paper stops
-    short of the label edge; positive values move the text towards the end of
-    the label. The shift is reserved before the text is sized, so text that
+    short of the label edge; positive values move the text to the right as the
+    label is read. The shift is reserved before the text is sized, so text that
     fills the label can still move, and it is never printed past the margin.
     `date` is printed in a smaller font on its own line under the text, which
     is then printed bold. `icon` is a Material Design Icons name printed as a
@@ -189,7 +189,7 @@ def render_label_image(
     width = max(box[2] - box[0] for box in boxes)
     if date_box:
         width = max(width, date_box[2] - date_box[0])
-    start_row = margin_dots + (full_span - width) // 2 + offset_dots
+    start_row = margin_dots + (full_span - width) // 2 - offset_dots
     start_row = max(margin_dots, min(start_row, label_rows - margin_dots - icon_size - icon_gap - width))
     # Rows leave the printer in the opposite order to the canvas x axis, so the
     # block is placed by mirroring its first printed row.

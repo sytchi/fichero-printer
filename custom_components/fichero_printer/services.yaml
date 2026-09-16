@@ -64,7 +64,7 @@ print_label:
           mode: box
     offset_mm:
       name: Offset (mm)
-      description: Shifts the text along the label; positive moves it towards the end.
+      description: Shifts the text along the label; positive moves it to the right as the label is read.
       default: 0
       selector:
         number:
