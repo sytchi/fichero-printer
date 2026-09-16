@@ -95,6 +95,12 @@ print_label:
           max: 10
           step: 0.5
           mode: box
+    bold:
+      name: Bold
+      description: Prints the text and the date in the bold face; leave it on unless the label needs a lighter look.
+      default: true
+      selector:
+        boolean:
     length_mm:
       name: Label length (mm)
       description: Prints on a tape of a different length than the one configured for this printer.

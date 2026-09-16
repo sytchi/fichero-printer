@@ -18,6 +18,7 @@ class FicheroPrinterCard extends HTMLElement {
     this._lengthMm = null;
     this._offsetMm = null;
     this._withDate = false;
+    this._bold = true;
     this._date = this._localDate();
   }
 
@@ -89,13 +90,15 @@ class FicheroPrinterCard extends HTMLElement {
     const attributes = this._hass.states[this._entityId].attributes;
     this._lengthMm = this._number(stored.length_mm, this._number(attributes.label_length_mm, 30));
     this._offsetMm = this._number(stored.offset_mm, this._number(this._config?.offset_mm, 0));
+    // Bold is the default, so only an explicit false switches it off.
+    this._bold = stored.bold !== false;
   }
 
   _saveLayout() {
     try {
       window.localStorage.setItem(
         this._layoutKey(),
-        JSON.stringify({ length_mm: this._lengthMm, offset_mm: this._offsetMm })
+        JSON.stringify({ length_mm: this._lengthMm, offset_mm: this._offsetMm, bold: this._bold })
       );
     } catch (error) {
       // A private window refuses to store anything; the values still hold for
@@ -139,7 +142,7 @@ class FicheroPrinterCard extends HTMLElement {
   }
 
   _printData(text) {
-    const data = { text, copies: this._copies };
+    const data = { text, copies: this._copies, bold: this._bold };
     if (this._withDate) data.date = this._printedDate();
     if (this._withIcon && this._icon.trim()) {
       data.icon = this._icon.trim();
@@ -217,6 +220,7 @@ class FicheroPrinterCard extends HTMLElement {
           <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
           <label><input id="with-date" type="checkbox"> Add date</label>
           <input id="date" type="date">
+          <label><input id="bold" type="checkbox" checked> Bold</label>
         </div>
         <div class="row">
           <label>Length <input id="length" type="number" min="10" max="100" step="1"> mm</label>
@@ -304,6 +308,13 @@ class FicheroPrinterCard extends HTMLElement {
       this._schedulePreview();
     });
     this._restoreLayout();
+    const boldBox = root.getElementById("bold");
+    boldBox.checked = this._bold;
+    boldBox.addEventListener("change", (event) => {
+      this._bold = event.target.checked;
+      this._saveLayout();
+      this._schedulePreview();
+    });
     const length = root.getElementById("length");
     length.value = this._lengthMm;
     length.addEventListener("change", (event) => {
@@ -412,6 +423,7 @@ class FicheroPrinterCard extends HTMLElement {
       config_entry_id: state.attributes.config_entry_id,
       text: data.text,
       date: data.date || "",
+      bold: data.bold,
     };
     if (data.icon) {
       message.icon = data.icon;

@@ -199,8 +199,7 @@ def test_date_is_printed_on_its_own_line_under_bold_text(monkeypatch):
     assert values[-1] == "10-08-2026"
     assert " ".join(values[:-1]) == "Gnocchi chorizo"
     faces = [font.getname()[1] for _, _, font in calls]
-    assert all(face == "Bold" for face in faces[:-1])
-    assert faces[-1] == "Book"
+    assert all(face == "Bold" for face in faces)
 
 
 def test_date_uses_a_smaller_font_than_the_text(monkeypatch):
@@ -210,15 +209,21 @@ def test_date_uses_a_smaller_font_than_the_text(monkeypatch):
     assert date_font.size < title_font.size
 
 
-def test_text_without_a_date_is_not_bold(monkeypatch):
+def test_text_is_bold_by_default(monkeypatch):
     calls = _drawn_calls(monkeypatch, "Gnocchi chorizo")
+    assert all(font.getname()[1] == "Bold" for _, _, font in calls)
+
+
+def test_bold_can_be_turned_off(monkeypatch):
+    calls = _drawn_calls(monkeypatch, "Gnocchi chorizo", date="16-09-2026", bold=False)
+    assert [value for value, _, _ in calls][-1] == "16-09-2026"
     assert all(font.getname()[1] == "Book" for _, _, font in calls)
 
 
-def test_date_alone_prints_as_a_plain_label(monkeypatch):
+def test_date_alone_prints_as_an_ordinary_label(monkeypatch):
     calls = _drawn_calls(monkeypatch, "", date="16-09-2026")
     assert [value for value, _, _ in calls] == ["16-09-2026"]
-    assert all(font.getname()[1] == "Book" for _, _, font in calls)
+    assert all(font.getname()[1] == "Bold" for _, _, font in calls)
 
 
 def test_empty_text_without_a_date_is_rejected():

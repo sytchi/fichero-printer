@@ -365,6 +365,7 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
         icon_side="left",
         artwork=None,
         artwork_mode="icon",
+        bold=True,
     ):
         captured.update(
             text=text,
@@ -376,6 +377,7 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
             icon_side=icon_side,
             artwork=artwork,
             artwork_mode=artwork_mode,
+            bold=bold,
         )
         return b""
 
@@ -401,6 +403,7 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
         "icon_side": "right",
         "artwork": None,
         "artwork_mode": "icon",
+        "bold": True,
     }
 
 

@@ -137,6 +137,7 @@ def render_label_image(
     icon_side: str = DEFAULT_ICON_SIDE,
     artwork: bytes | None = None,
     artwork_mode: str = DEFAULT_ARTWORK_MODE,
+    bold: bool = True,
 ) -> Image.Image:
     """Lay the label out as it will be printed and return it as an image.
 
@@ -146,7 +147,9 @@ def render_label_image(
     right as the label is read. The shift is reserved before the text is sized,
     so text that fills the label can still move, and nothing is printed past
     the margin. `date` is printed in a smaller font on its own line under the
-    text, which is then printed bold. `icon` is a Material Design Icons name
+    text. `bold` prints the whole label, date included, in the bold face; it is
+    on by default because a thin face is hard to read on a shelf. `icon` is a
+    Material Design Icons name
     printed as a square pictogram on the `icon_side` end of the label.
     `artwork` is a generated picture: in `icon` mode it takes the place of the
     pictogram, in `full` mode it is printed alone across the whole label.
@@ -193,7 +196,7 @@ def render_label_image(
     if not words:
         # A date on its own is just an ordinary one-line label.
         words, date = date.split(), ""
-    bold = bool(date)
+    bold = bool(bold)
 
     best = None
     low, high = 6, min(PRINTHEAD_PX, span)
@@ -208,7 +211,7 @@ def render_label_image(
         height = _block_height(draw, lines, font, gap)
         date_font = None
         if date:
-            date_font = _font(_date_size(size))
+            date_font = _font(_date_size(size), bold)
             if _line_width(draw, date, date_font) > span:
                 high = size - 1
                 continue
@@ -291,11 +294,12 @@ def render_text_raster(
     icon_side: str = DEFAULT_ICON_SIDE,
     artwork: bytes | None = None,
     artwork_mode: str = DEFAULT_ARTWORK_MODE,
+    bold: bool = True,
 ) -> bytes:
     """Render the label and pack it the way the printer expects it."""
     canvas = render_label_image(
         text, label_rows, margin_dots, offset_dots, max_lines, date, icon, icon_side,
-        artwork, artwork_mode,
+        artwork, artwork_mode, bold,
     )
     # Printer raster is 96 pixels wide and one row per dot along label length.
     rotated = canvas.rotate(90, expand=True)
@@ -313,12 +317,13 @@ def render_preview_png(
     icon_side: str = DEFAULT_ICON_SIDE,
     artwork: bytes | None = None,
     artwork_mode: str = DEFAULT_ARTWORK_MODE,
+    bold: bool = True,
     scale: int = PREVIEW_SCALE,
 ) -> bytes:
     """Render the same layout the printer gets, as a PNG for the dashboard."""
     canvas = render_label_image(
         text, label_rows, margin_dots, offset_dots, max_lines, date, icon, icon_side,
-        artwork, artwork_mode,
+        artwork, artwork_mode, bold,
     )
     scale = max(1, int(scale))
     if scale > 1:

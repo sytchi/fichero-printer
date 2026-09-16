@@ -398,6 +398,7 @@ class FicheroManager:
         artwork: str = "",
         artwork_mode: str = DEFAULT_ARTWORK_MODE,
         length_mm: float | None = None,
+        bold: bool = True,
     ) -> None:
         text = text.strip()
         date = date.strip()
@@ -426,6 +427,7 @@ class FicheroManager:
                     icon_side=icon_side,
                     artwork=picture,
                     artwork_mode=artwork_mode,
+                    bold=bold,
                 )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)
