@@ -114,6 +114,18 @@ class FicheroPrinterCard extends HTMLElement {
     return next;
   }
 
+  _iconSideAvailable() {
+    // A generated pictogram is printed without ticking the icon checkbox, so
+    // the side switch has to stay usable for it as well.
+    return this._withIcon || (Boolean(this._artwork) && this._artworkMode === "icon");
+  }
+
+  _syncIconControls() {
+    const root = this.shadowRoot;
+    root.getElementById("icon").disabled = !this._withIcon;
+    root.getElementById("icon-side").disabled = !this._iconSideAvailable();
+  }
+
   _localDate() {
     // toISOString() is UTC, which is yesterday for most of the evening east of
     // Greenwich, so the picker has to be filled from the local date.
@@ -245,14 +257,12 @@ class FicheroPrinterCard extends HTMLElement {
     root.getElementById("print").onclick = () => this._call("print_label", this._printData(this._text));
     root.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
     const icon = root.getElementById("icon");
-    icon.disabled = !this._withIcon;
     icon.addEventListener("input", (event) => {
       this._icon = event.target.value;
       this._schedulePreview();
     });
     const iconSide = root.getElementById("icon-side");
     iconSide.value = this._iconSide;
-    iconSide.disabled = !this._withIcon;
     iconSide.addEventListener("change", (event) => {
       this._iconSide = event.target.value;
       this._schedulePreview();
@@ -262,8 +272,7 @@ class FicheroPrinterCard extends HTMLElement {
     withIcon.checked = this._withIcon;
     withIcon.addEventListener("change", (event) => {
       this._withIcon = event.target.checked;
-      icon.disabled = !this._withIcon;
-      iconSide.disabled = !this._withIcon;
+      this._syncIconControls();
       this._schedulePreview();
     });
 
@@ -276,6 +285,7 @@ class FicheroPrinterCard extends HTMLElement {
     root.getElementById("clear-artwork").onclick = () => {
       this._artwork = "";
       root.getElementById("clear-artwork").hidden = true;
+      this._syncIconControls();
       this._schedulePreview();
     };
 
@@ -309,6 +319,7 @@ class FicheroPrinterCard extends HTMLElement {
       this._schedulePreview();
     });
 
+    this._syncIconControls();
     this._built = true;
     this._schedulePreview();
   }
@@ -337,6 +348,7 @@ class FicheroPrinterCard extends HTMLElement {
       });
       this._artwork = result.artwork;
       this._artworkMode = mode;
+      this._syncIconControls();
       root.getElementById("clear-artwork").hidden = false;
       error.hidden = true;
       this._schedulePreview();
@@ -408,6 +420,8 @@ class FicheroPrinterCard extends HTMLElement {
     if (data.artwork) {
       message.artwork = data.artwork;
       message.artwork_mode = data.artwork_mode;
+      // Without this the preview always drew a generated pictogram on the left.
+      if (data.icon_side) message.icon_side = data.icon_side;
     }
     if (data.margin_mm !== undefined) message.margin_mm = data.margin_mm;
     if (data.offset_mm !== undefined) message.offset_mm = data.offset_mm;
