@@ -88,6 +88,11 @@ async def _generate_picture(hass: HomeAssistant, entity_id: str, prompt: str) ->
     if not media_id:
         raise HomeAssistantError("The AI Task returned no image")
     media = await media_source.async_resolve_media(hass, media_id, None)
+    if media.path is not None:
+        # Generated images land in the media folder, so read the file itself:
+        # the signed URL in the service response is meant for a browser and
+        # comes back 401 when the integration fetches it.
+        return await hass.async_add_executor_job(media.path.read_bytes)
     url = media.url if media.url.startswith("http") else get_url(hass, prefer_external=False) + media.url
     response = await async_get_clientsession(hass).get(url)
     response.raise_for_status()
