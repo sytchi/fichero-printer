@@ -9,7 +9,7 @@ class FicheroPrinterCard extends HTMLElement {
     this._built = false;
     this._favoritesKey = null;
     this._withDate = false;
-    this._date = new Date().toISOString().slice(0, 10);
+    this._date = this._localDate();
   }
 
   static getStubConfig() { return {}; }
@@ -59,6 +59,13 @@ class FicheroPrinterCard extends HTMLElement {
       this._busy = false;
       this._render();
     }
+  }
+
+  _localDate() {
+    // toISOString() is UTC, which is yesterday for most of the evening east of
+    // Greenwich, so the picker has to be filled from the local date.
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }
 
   _printedDate() {
