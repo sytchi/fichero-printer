@@ -53,6 +53,14 @@ SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
 )
 
 
+def _is_icon(name: str) -> bool:
+    try:
+        icon_character(name)
+    except ValueError:
+        return False
+    return True
+
+
 ICON_INSTRUCTIONS = (
     "Pick the single Material Design Icons (MDI) icon that best illustrates this "
     "label for a household storage container. Answer with the bare icon name as "
@@ -106,9 +114,31 @@ async def websocket_suggest_icon(hass: HomeAssistant, connection, msg: dict) -> 
         connection.send_error(msg["id"], "ai_task_failed", str(err))
         return
     suggestion = str((result or {}).get("data", {}).get("icon", "")).strip()
-    try:
-        icon_character(suggestion)
-    except ValueError:
+    if not _is_icon(suggestion):
+        # Models reach for plausible names that do not exist, so give one
+        # correction round with the rejected name spelled out.
+        try:
+            result = await hass.services.async_call(
+                "ai_task",
+                "generate_data",
+                {
+                    "entity_id": ai_task_entity,
+                    "task_name": "Fichero label icon",
+                    "instructions": (
+                        f"{ICON_INSTRUCTIONS}{msg['text'].strip()}\n"
+                        f"The name {suggestion or 'you gave'} does not exist in MDI. "
+                        "Pick a different, existing MDI icon name."
+                    ),
+                    "structure": {"icon": {"selector": {"text": {}}}},
+                },
+                blocking=True,
+                return_response=True,
+            )
+        except HomeAssistantError as err:
+            connection.send_error(msg["id"], "ai_task_failed", str(err))
+            return
+        suggestion = str((result or {}).get("data", {}).get("icon", "")).strip()
+    if not _is_icon(suggestion):
         connection.send_error(
             msg["id"],
             "invalid_icon",

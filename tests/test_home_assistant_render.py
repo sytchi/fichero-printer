@@ -329,3 +329,26 @@ def test_icon_fits_next_to_a_dated_label():
     raster = render.render_text_raster("Zupa ogórkowa", 240, date="16-09-2026", icon="mdi:bowl-mix")
     assert len(raster) == 240 * 12
     assert any(raster)
+
+
+def test_icon_data_is_looked_up_next_to_the_module_too(tmp_path, monkeypatch):
+    monkeypatch.setattr(render, "ICON_DIRS", (tmp_path / "icons", tmp_path))
+    (tmp_path / "mdi-codepoints.json").write_text('{"pasta": 987000}', encoding="utf-8")
+    render._ICON_CODEPOINTS.clear()
+    try:
+        assert render.icon_character("mdi:pasta") == chr(987000)
+    finally:
+        render._ICON_CODEPOINTS.clear()
+
+
+def test_missing_icon_data_is_not_cached(tmp_path, monkeypatch):
+    monkeypatch.setattr(render, "ICON_DIRS", (tmp_path / "nope",))
+    render._ICON_CODEPOINTS.clear()
+    try:
+        assert render._icon_codepoints() == {}
+        (tmp_path / "nope").mkdir()
+        (tmp_path / "nope" / "mdi-codepoints.json").write_text('{"pasta": 987000}', encoding="utf-8")
+        # No restart should be needed once the files show up.
+        assert render._icon_codepoints() == {"pasta": 987000}
+    finally:
+        render._ICON_CODEPOINTS.clear()

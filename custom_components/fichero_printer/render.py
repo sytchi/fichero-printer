@@ -27,9 +27,20 @@ FONT_DIR = Path(__file__).parent / "fonts"
 FONTS = {False: FONT_DIR / "DejaVuSans.ttf", True: FONT_DIR / "DejaVuSans-Bold.ttf"}
 # Home Assistant keeps its Material Design Icons in the frontend, so the
 # integration carries the webfont to be able to draw one on the tape.
-ICON_DIR = Path(__file__).parent / "icons"
-ICON_FONT = ICON_DIR / "materialdesignicons-webfont.ttf"
-ICON_CODEPOINTS = ICON_DIR / "mdi-codepoints.json"
+# Some file transports refuse to create the subdirectory, so the assets are
+# also accepted next to the module itself.
+ICON_DIRS = (Path(__file__).parent / "icons", Path(__file__).parent)
+ICON_FONT_NAME = "materialdesignicons-webfont.ttf"
+ICON_CODEPOINTS_NAME = "mdi-codepoints.json"
+_ICON_CODEPOINTS: dict[str, int] = {}
+
+
+def _icon_file(name: str) -> Path:
+    for directory in ICON_DIRS:
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+    return ICON_DIRS[0] / name
 
 
 @lru_cache(maxsize=128)
@@ -42,17 +53,22 @@ def _font(size: int, bold: bool = False):
         return ImageFont.load_default(size=size)
 
 
-@lru_cache(maxsize=1)
 def _icon_codepoints() -> dict[str, int]:
-    try:
-        return json.loads(ICON_CODEPOINTS.read_text(encoding="utf-8"))
-    except OSError:
-        return {}
+    # Never cache an empty result: the assets may simply not have been copied
+    # yet, and a restart should not be needed once they are.
+    if not _ICON_CODEPOINTS:
+        try:
+            _ICON_CODEPOINTS.update(
+                json.loads(_icon_file(ICON_CODEPOINTS_NAME).read_text(encoding="utf-8"))
+            )
+        except OSError:
+            return {}
+    return _ICON_CODEPOINTS
 
 
 @lru_cache(maxsize=32)
 def _icon_font(size: int):
-    return ImageFont.truetype(str(ICON_FONT), size)
+    return ImageFont.truetype(str(_icon_file(ICON_FONT_NAME)), size)
 
 
 def icon_character(icon: str) -> str:
