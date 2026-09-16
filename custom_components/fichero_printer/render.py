@@ -1,6 +1,8 @@
 """Dependency-light label renderer, kept separate for unit testing."""
 
+from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -11,23 +13,38 @@ DEFAULT_MAX_LINES = 3
 # The date is a footnote under the name, and the name is printed bold so it
 # stays readable on a shelf.
 DATE_SIZE_RATIO = 0.55
-TITLE_STROKE = 1
 # Labels are tiny, so the on-screen preview is scaled up.
 PREVIEW_SCALE = 2
 
+# Pillow's built-in font only covers basic Latin: every accented character came
+# out as a box on the tape. The bundled DejaVu faces carry the accents and give
+# a real bold instead of an outlined fake one.
+FONT_DIR = Path(__file__).parent / "fonts"
+FONTS = {False: FONT_DIR / "DejaVuSans.ttf", True: FONT_DIR / "DejaVuSans-Bold.ttf"}
 
-def _line_width(draw, text: str, font, stroke: int = 0) -> int:
-    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
+
+@lru_cache(maxsize=128)
+def _font(size: int, bold: bool = False):
+    try:
+        return ImageFont.truetype(str(FONTS[bold]), size)
+    except OSError:
+        # Without the bundled files there is still something to print with,
+        # even though accented characters will render as boxes.
+        return ImageFont.load_default(size=size)
+
+
+def _line_width(draw, text: str, font) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
     return bbox[2] - bbox[0]
 
 
-def _wrap(draw, words: list[str], font, span: int, max_lines: int, stroke: int) -> list[str] | None:
+def _wrap(draw, words: list[str], font, span: int, max_lines: int) -> list[str] | None:
     """Greedily wrap words into at most max_lines lines no wider than span."""
     lines: list[str] = []
     current = ""
     for word in words:
         candidate = f"{current} {word}".strip()
-        if not current or _line_width(draw, candidate, font, stroke) <= span:
+        if not current or _line_width(draw, candidate, font) <= span:
             current = candidate
             continue
         lines.append(current)
@@ -37,18 +54,18 @@ def _wrap(draw, words: list[str], font, span: int, max_lines: int, stroke: int) 
     lines.append(current)
     if len(lines) > max_lines:
         return None
-    if any(_line_width(draw, line, font, stroke) > span for line in lines):
+    if any(_line_width(draw, line, font) > span for line in lines):
         return None
     return lines
 
 
-def _height(draw, text: str, font, stroke: int = 0) -> int:
-    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
+def _height(draw, text: str, font) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
     return bbox[3] - bbox[1]
 
 
-def _block_height(draw, lines: list[str], font, gap: int, stroke: int) -> int:
-    return sum(_height(draw, line, font, stroke) for line in lines) + gap * (len(lines) - 1)
+def _block_height(draw, lines: list[str], font, gap: int) -> int:
+    return sum(_height(draw, line, font) for line in lines) + gap * (len(lines) - 1)
 
 
 def render_label_image(
@@ -90,22 +107,22 @@ def render_label_image(
     if not words:
         # A date on its own is just an ordinary one-line label.
         words, date = date.split(), ""
-    stroke = TITLE_STROKE if date else 0
+    bold = bool(date)
 
     best = None
     low, high = 6, min(PRINTHEAD_PX, span)
     while low <= high:
         size = (low + high) // 2
-        font = ImageFont.load_default(size=size)
+        font = _font(size, bold)
         gap = max(1, size // 6)
-        lines = _wrap(draw, words, font, span, max_lines, stroke)
+        lines = _wrap(draw, words, font, span, max_lines)
         if lines is None:
             high = size - 1
             continue
-        height = _block_height(draw, lines, font, gap, stroke)
+        height = _block_height(draw, lines, font, gap)
         date_font = None
         if date:
-            date_font = ImageFont.load_default(size=max(6, round(size * DATE_SIZE_RATIO)))
+            date_font = _font(max(6, round(size * DATE_SIZE_RATIO)))
             if _line_width(draw, date, date_font) > span:
                 high = size - 1
                 continue
@@ -119,7 +136,7 @@ def render_label_image(
         raise ValueError("Text cannot fit on this label")
 
     font, lines, gap, date_font, height = best
-    boxes = [draw.textbbox((0, 0), line, font=font, stroke_width=stroke) for line in lines]
+    boxes = [draw.textbbox((0, 0), line, font=font) for line in lines]
     date_box = draw.textbbox((0, 0), date, font=date_font) if date else None
     width = max(box[2] - box[0] for box in boxes)
     if date_box:
@@ -136,8 +153,6 @@ def render_label_image(
             line,
             font=font,
             fill=0,
-            stroke_width=stroke,
-            stroke_fill=0,
         )
         y += box[3] - box[1] + gap
     if date_box:

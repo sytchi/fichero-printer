@@ -187,9 +187,9 @@ def test_date_is_printed_on_its_own_line_under_bold_text(monkeypatch):
     values = [value for value, _, _ in calls]
     assert values[-1] == "10-08-2026"
     assert " ".join(values[:-1]) == "Gnocchi chorizo"
-    strokes = [stroke for _, stroke, _ in calls]
-    assert all(stroke == render.TITLE_STROKE for stroke in strokes[:-1])
-    assert strokes[-1] == 0
+    faces = [font.getname()[1] for _, _, font in calls]
+    assert all(face == "Bold" for face in faces[:-1])
+    assert faces[-1] == "Book"
 
 
 def test_date_uses_a_smaller_font_than_the_text(monkeypatch):
@@ -201,13 +201,13 @@ def test_date_uses_a_smaller_font_than_the_text(monkeypatch):
 
 def test_text_without_a_date_is_not_bold(monkeypatch):
     calls = _drawn_calls(monkeypatch, "Gnocchi chorizo")
-    assert all(stroke == 0 for _, stroke, _ in calls)
+    assert all(font.getname()[1] == "Book" for _, _, font in calls)
 
 
 def test_date_alone_prints_as_a_plain_label(monkeypatch):
     calls = _drawn_calls(monkeypatch, "", date="16-09-2026")
     assert [value for value, _, _ in calls] == ["16-09-2026"]
-    assert all(stroke == 0 for _, stroke, _ in calls)
+    assert all(font.getname()[1] == "Book" for _, _, font in calls)
 
 
 def test_empty_text_without_a_date_is_rejected():
@@ -250,3 +250,18 @@ def test_preview_refuses_an_empty_label():
 def test_preview_refuses_text_that_cannot_fit():
     with pytest.raises(ValueError, match="cannot fit"):
         render.render_preview_png("Unbreakable" * 40, 240)
+
+
+def test_bundled_fonts_are_used_and_carry_accents():
+    font = render._font(30)
+    assert font.getname() == ("DejaVu Sans", "Book")
+    assert render._font(30, True).getname() == ("DejaVu Sans", "Bold")
+    # A box glyph would be the same width for every accented character.
+    widths = {ch: font.getbbox(ch)[2] - font.getbbox(ch)[0] for ch in "ąćęłńóśżź"}
+    assert len(set(widths.values())) > 3
+
+
+def test_accented_text_prints_differently_than_plain_text():
+    with_accents = render.render_text_raster("ogórkowa", 240)
+    without = render.render_text_raster("ogorkowa", 240)
+    assert with_accents != without
