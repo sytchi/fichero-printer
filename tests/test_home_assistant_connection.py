@@ -402,3 +402,42 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
         "artwork": None,
         "artwork_mode": "icon",
     }
+
+
+def test_print_length_overrides_the_configured_tape(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 30, "density": 2}
+    manager.client = client()
+    manager._send = AsyncMock(return_value=bytes([0x00]))
+    manager._send_chunked = AsyncMock()
+    captured = {}
+
+    def fake_render(text, rows, **kwargs):
+        captured["rows"] = rows
+        return b""
+
+    manager_module.render_text_raster = fake_render
+    asyncio.run(manager.async_print("Salt", 1, length_mm=57.5))
+
+    # 57.5 mm at 8 dots per millimetre, rounded to whole dots.
+    assert captured["rows"] == 460
+    header = manager._send_chunked.await_args[0][0][:8]
+    assert header[6] | (header[7] << 8) == 460
+
+
+def test_print_without_a_length_uses_the_configured_one(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 30, "density": 2}
+    manager.client = client()
+    manager._send = AsyncMock(return_value=bytes([0x00]))
+    manager._send_chunked = AsyncMock()
+    captured = {}
+
+    def fake_render(text, rows, **kwargs):
+        captured["rows"] = rows
+        return b""
+
+    manager_module.render_text_raster = fake_render
+    asyncio.run(manager.async_print("Salt", 1))
+
+    assert captured["rows"] == 240

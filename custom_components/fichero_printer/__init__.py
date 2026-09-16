@@ -25,6 +25,8 @@ from .const import (
     CONF_LABEL_LENGTH,
     DEFAULT_MARGIN_MM,
     DOMAIN,
+    MAX_LABEL_LENGTH,
+    MIN_LABEL_LENGTH,
     PLATFORMS,
     SERVICE_CONNECT,
     SERVICE_DELETE_FAVORITE,
@@ -59,6 +61,9 @@ SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
         vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
         vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
+        vol.Optional("length_mm"): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_LABEL_LENGTH, max=MAX_LABEL_LENGTH)
+        ),
         vol.Optional("date", default=""): cv.string,
         vol.Optional("icon", default=""): cv.string,
         vol.Optional("icon_side", default=DEFAULT_ICON_SIDE): vol.In(ICON_SIDES),
@@ -287,6 +292,9 @@ async def websocket_suggest_icon(hass: HomeAssistant, connection, msg: dict) -> 
         vol.Optional("artwork_mode", default=DEFAULT_ARTWORK_MODE): vol.In(ARTWORK_MODES),
         vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
         vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
+        vol.Optional("length_mm"): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_LABEL_LENGTH, max=MAX_LABEL_LENGTH)
+        ),
     }
 )
 @websocket_api.async_response
@@ -303,7 +311,7 @@ async def websocket_preview(hass: HomeAssistant, connection, msg: dict) -> None:
             partial(
                 render_preview_png,
                 msg["text"],
-                entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM,
+                round((msg.get("length_mm") or entry.data[CONF_LABEL_LENGTH]) * DOTS_PER_MM),
                 margin_dots=round(msg["margin_mm"] * DOTS_PER_MM),
                 offset_dots=round(msg["offset_mm"] * DOTS_PER_MM),
                 date=msg["date"],
@@ -352,6 +360,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
             call.data["icon_side"],
             call.data["artwork"],
             call.data["artwork_mode"],
+            call.data.get("length_mm"),
         )
 
     async def handle_save(call: ServiceCall) -> None:

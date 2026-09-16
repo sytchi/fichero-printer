@@ -15,6 +15,8 @@ class FicheroPrinterCard extends HTMLElement {
     this._artwork = "";
     this._artworkMode = "icon";
     this._artworkPrompt = "";
+    this._lengthMm = null;
+    this._offsetMm = null;
     this._withDate = false;
     this._date = this._localDate();
   }
@@ -30,7 +32,7 @@ class FicheroPrinterCard extends HTMLElement {
       computeLabel: (field) => ({
         entity: "Printer status entity",
         margin_mm: "Margin (mm)",
-        offset_mm: "Offset along the label (mm)",
+        offset_mm: "Offset along the label (mm, the card starts from this)",
       }[field.name] || field.name),
     };
   }
@@ -68,6 +70,50 @@ class FicheroPrinterCard extends HTMLElement {
     }
   }
 
+  _layoutKey() { return `fichero-printer-layout:${this._entityId}`; }
+
+  _number(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  _restoreLayout() {
+    // Kept per printer so the tape length survives a dashboard reload; the
+    // configured length and the card config are only the starting point.
+    let stored = {};
+    try {
+      stored = JSON.parse(window.localStorage.getItem(this._layoutKey()) || "{}") || {};
+    } catch (error) {
+      stored = {};
+    }
+    const attributes = this._hass.states[this._entityId].attributes;
+    this._lengthMm = this._number(stored.length_mm, this._number(attributes.label_length_mm, 30));
+    this._offsetMm = this._number(stored.offset_mm, this._number(this._config?.offset_mm, 0));
+  }
+
+  _saveLayout() {
+    try {
+      window.localStorage.setItem(
+        this._layoutKey(),
+        JSON.stringify({ length_mm: this._lengthMm, offset_mm: this._offsetMm })
+      );
+    } catch (error) {
+      // A private window refuses to store anything; the values still hold for
+      // this visit, so there is nothing to report.
+    }
+  }
+
+  _commit(input, min, max, previous) {
+    // Clamping waits for the field to be committed: a half typed "6" on its way
+    // to "60" would otherwise snap to the minimum and block the second digit.
+    const value = Number(input.value);
+    const next = Number.isFinite(value) && input.value !== ""
+      ? Math.min(max, Math.max(min, value))
+      : previous;
+    input.value = next;
+    return next;
+  }
+
   _localDate() {
     // toISOString() is UTC, which is yesterday for most of the evening east of
     // Greenwich, so the picker has to be filled from the local date.
@@ -93,9 +139,9 @@ class FicheroPrinterCard extends HTMLElement {
       if (this._artworkMode === "icon") data.icon_side = this._iconSide;
     }
     const margin = Number(this._config?.margin_mm);
-    const offset = Number(this._config?.offset_mm);
     if (Number.isFinite(margin)) data.margin_mm = margin;
-    if (Number.isFinite(offset)) data.offset_mm = offset;
+    if (Number.isFinite(this._offsetMm)) data.offset_mm = this._offsetMm;
+    if (Number.isFinite(this._lengthMm)) data.length_mm = this._lengthMm;
     return data;
   }
 
@@ -159,6 +205,10 @@ class FicheroPrinterCard extends HTMLElement {
           <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
           <label><input id="with-date" type="checkbox"> Add date</label>
           <input id="date" type="date">
+        </div>
+        <div class="row">
+          <label>Length <input id="length" type="number" min="10" max="100" step="1"> mm</label>
+          <label>Offset <input id="offset" type="number" min="-10" max="10" step="0.5"> mm</label>
         </div>
         <div class="row">
           <input id="artwork-prompt" type="text" placeholder="Picture for the whole label">
@@ -243,6 +293,22 @@ class FicheroPrinterCard extends HTMLElement {
       date.disabled = !this._withDate;
       this._schedulePreview();
     });
+    this._restoreLayout();
+    const length = root.getElementById("length");
+    length.value = this._lengthMm;
+    length.addEventListener("change", (event) => {
+      this._lengthMm = this._commit(event.target, 10, 100, this._lengthMm);
+      this._saveLayout();
+      this._schedulePreview();
+    });
+    const offset = root.getElementById("offset");
+    offset.value = this._offsetMm;
+    offset.addEventListener("change", (event) => {
+      this._offsetMm = this._commit(event.target, -10, 10, this._offsetMm);
+      this._saveLayout();
+      this._schedulePreview();
+    });
+
     this._built = true;
     this._schedulePreview();
   }
@@ -345,6 +411,7 @@ class FicheroPrinterCard extends HTMLElement {
     }
     if (data.margin_mm !== undefined) message.margin_mm = data.margin_mm;
     if (data.offset_mm !== undefined) message.offset_mm = data.offset_mm;
+    if (data.length_mm !== undefined) message.length_mm = data.length_mm;
     try {
       const result = await this._hass.callWS(message);
       preview.src = `data:image/png;base64,${result.png}`;

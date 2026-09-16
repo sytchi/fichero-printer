@@ -22,6 +22,8 @@ from .const import (
     DEFAULT_LABEL_LENGTH,
     DEFAULT_STARTUP_DELAY,
     DOMAIN,
+    MAX_LABEL_LENGTH,
+    MIN_LABEL_LENGTH,
 )
 
 AI_TASK_ENTITIES = (CONF_AI_TASK_ENTITY, CONF_AI_IMAGE_ENTITY)
@@ -46,7 +48,7 @@ def build_schema(current: dict, *, include_name: bool = True) -> vol.Schema:
     ] = vol.All(vol.Coerce(float), vol.Range(min=0, max=30))
     fields[
         vol.Required(CONF_LABEL_LENGTH, default=current.get(CONF_LABEL_LENGTH, DEFAULT_LABEL_LENGTH))
-    ] = vol.All(vol.Coerce(int), vol.Range(min=10, max=100))
+    ] = vol.All(vol.Coerce(int), vol.Range(min=MIN_LABEL_LENGTH, max=MAX_LABEL_LENGTH))
     fields[vol.Required(CONF_DENSITY, default=current.get(CONF_DENSITY, DEFAULT_DENSITY))] = vol.In([0, 1, 2])
     fields[
         vol.Required(CONF_POWER_OFF_ON_DISCONNECT, default=current.get(CONF_POWER_OFF_ON_DISCONNECT, True))

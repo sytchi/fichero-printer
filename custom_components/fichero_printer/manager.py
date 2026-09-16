@@ -397,6 +397,7 @@ class FicheroManager:
         icon_side: str = DEFAULT_ICON_SIDE,
         artwork: str = "",
         artwork_mode: str = DEFAULT_ARTWORK_MODE,
+        length_mm: float | None = None,
     ) -> None:
         text = text.strip()
         date = date.strip()
@@ -412,7 +413,9 @@ class FicheroManager:
             if not self.connected:
                 raise HomeAssistantError("Printer disconnected before printing")
             try:
-                label_rows = self.entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM
+                # A length passed with the call wins, so a different tape can be
+                # printed without reconfiguring the printer.
+                label_rows = round((length_mm or self.entry.data[CONF_LABEL_LENGTH]) * DOTS_PER_MM)
                 raster = render_text_raster(
                     text,
                     label_rows,
