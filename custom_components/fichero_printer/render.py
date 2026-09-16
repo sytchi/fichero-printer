@@ -13,6 +13,9 @@ DEFAULT_MAX_LINES = 3
 # The date is a footnote under the name, and the name is printed bold so it
 # stays readable on a shelf.
 DATE_SIZE_RATIO = 0.55
+# A name long enough to wrap onto three lines used to squeeze the date down to
+# a few unreadable dots, so give it a floor and let the name shrink instead.
+MIN_DATE_DOTS = 12
 # Labels are tiny, so the on-screen preview is scaled up.
 PREVIEW_SCALE = 2
 
@@ -31,6 +34,11 @@ def _font(size: int, bold: bool = False):
         # Without the bundled files there is still something to print with,
         # even though accented characters will render as boxes.
         return ImageFont.load_default(size=size)
+
+
+def _date_size(title_size: int) -> int:
+    """Keep the date readable without ever printing it larger than the name."""
+    return min(title_size, max(MIN_DATE_DOTS, round(title_size * DATE_SIZE_RATIO)))
 
 
 def _line_width(draw, text: str, font) -> int:
@@ -122,7 +130,7 @@ def render_label_image(
         height = _block_height(draw, lines, font, gap)
         date_font = None
         if date:
-            date_font = _font(max(6, round(size * DATE_SIZE_RATIO)))
+            date_font = _font(_date_size(size))
             if _line_width(draw, date, date_font) > span:
                 high = size - 1
                 continue

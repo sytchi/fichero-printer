@@ -265,3 +265,21 @@ def test_accented_text_prints_differently_than_plain_text():
     with_accents = render.render_text_raster("ogórkowa", 240)
     without = render.render_text_raster("ogorkowa", 240)
     assert with_accents != without
+
+
+def test_date_keeps_a_readable_size_when_the_name_wraps(monkeypatch):
+    long_name = "Zupa ogorkowa ze smietana i ziemniakami oraz selerem i pietruszka"
+    calls = _drawn_calls(monkeypatch, long_name, date="16-09-2026")
+    title_font = calls[0][2]
+    date_font = calls[-1][2]
+    assert len(calls) >= 3  # the name really did wrap
+    assert date_font.size >= render.MIN_DATE_DOTS
+    assert date_font.size <= title_font.size
+
+
+def test_short_name_keeps_the_date_proportional(monkeypatch):
+    calls = _drawn_calls(monkeypatch, "Kurczak", date="16-09-2026")
+    title_font = calls[0][2]
+    date_font = calls[-1][2]
+    assert date_font.size == render._date_size(title_font.size)
+    assert date_font.size < title_font.size
