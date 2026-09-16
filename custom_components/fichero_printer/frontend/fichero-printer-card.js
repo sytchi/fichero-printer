@@ -15,6 +15,7 @@ class FicheroPrinterCard extends HTMLElement {
     this._artwork = "";
     this._artworkMode = "icon";
     this._artworkPrompt = "";
+    this._drawing = "";
     this._lengthMm = null;
     this._offsetMm = null;
     this._withDate = false;
@@ -125,8 +126,21 @@ class FicheroPrinterCard extends HTMLElement {
 
   _syncIconControls() {
     const root = this.shadowRoot;
+    const drawing = Boolean(this._drawing);
     root.getElementById("icon").disabled = !this._withIcon;
     root.getElementById("icon-side").disabled = !this._iconSideAvailable();
+    // Drawing a pictogram belongs to the icon, so it waits for the checkbox.
+    root.getElementById("draw-icon").disabled = drawing || !this._withIcon;
+    root.getElementById("draw-artwork").disabled = drawing;
+    root.getElementById("suggest-icon").disabled = drawing;
+
+    const notice = root.getElementById("notice");
+    notice.textContent = {
+      icon: "Drawing the pictogram, this takes about half a minute…",
+      full: "Drawing the label picture, this takes about half a minute…",
+      suggest: "Picking an icon…",
+    }[this._drawing] || "";
+    notice.hidden = !drawing;
   }
 
   _localDate() {
@@ -205,6 +219,8 @@ class FicheroPrinterCard extends HTMLElement {
         #preview[hidden] { display:none; }
         #preview { display:block; width:100%; margin-bottom:12px; border:1px solid var(--divider-color); border-radius:8px; background:#fff; image-rendering:pixelated; }
         .preview-error { margin-bottom:12px; font-size:.9rem; color:var(--secondary-text-color); }
+        .notice { margin-bottom:12px; padding:10px 12px; font-size:.9rem; border-radius:8px; color:var(--primary-text-color); background:var(--secondary-background-color); }
+        .notice[hidden] { display:none; }
         .missing { padding:20px; }
       </style>
       <ha-card>
@@ -215,6 +231,7 @@ class FicheroPrinterCard extends HTMLElement {
         <div class="error" id="error" hidden></div>
         <img id="preview" alt="Label preview" hidden>
         <div class="preview-error" id="preview-error" hidden></div>
+        <div class="notice" id="notice" hidden></div>
         <textarea id="text" maxlength="500" placeholder="Text for your label"></textarea>
         <div class="row">
           <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
@@ -229,13 +246,13 @@ class FicheroPrinterCard extends HTMLElement {
         <div class="row">
           <input id="artwork-prompt" type="text" placeholder="Picture for the whole label">
           <button id="draw-artwork">Draw label</button>
-          <button id="draw-icon">Draw icon</button>
           <button id="clear-artwork" hidden>Clear picture</button>
         </div>
         <div class="row">
           <label><input id="with-icon" type="checkbox"> Icon</label>
           <input id="icon" type="text" placeholder="mdi:pasta">
           <button id="suggest-icon">Suggest</button>
+          <button id="draw-icon">Draw icon</button>
           <select id="icon-side" aria-label="Icon side">
             <option value="left">Icon left</option>
             <option value="right">Icon right</option>
@@ -348,8 +365,10 @@ class FicheroPrinterCard extends HTMLElement {
       error.hidden = false;
       return;
     }
-    this._busy = true;
-    this._render();
+    // Only the drawing buttons wait for the model: the text stays editable and
+    // the label can still be printed while a picture is on its way.
+    this._drawing = mode;
+    this._syncIconControls();
     try {
       const result = await this._hass.callWS({
         type: "fichero_printer/generate_artwork",
@@ -368,8 +387,8 @@ class FicheroPrinterCard extends HTMLElement {
       error.textContent = err?.message || String(err);
       error.hidden = false;
     } finally {
-      this._busy = false;
-      this._render();
+      this._drawing = "";
+      this._syncIconControls();
     }
   }
 
@@ -378,8 +397,8 @@ class FicheroPrinterCard extends HTMLElement {
     if (!state) return;
     const root = this.shadowRoot;
     const error = root.getElementById("preview-error");
-    this._busy = true;
-    this._render();
+    this._drawing = "suggest";
+    this._syncIconControls();
     try {
       const result = await this._hass.callWS({
         type: "fichero_printer/suggest_icon",
@@ -389,16 +408,16 @@ class FicheroPrinterCard extends HTMLElement {
       this._icon = result.icon;
       this._withIcon = true;
       root.getElementById("icon").value = result.icon;
-      root.getElementById("icon").disabled = false;
       root.getElementById("with-icon").checked = true;
+      this._syncIconControls();
       error.hidden = true;
       this._schedulePreview();
     } catch (err) {
       error.textContent = err?.message || String(err);
       error.hidden = false;
     } finally {
-      this._busy = false;
-      this._render();
+      this._drawing = "";
+      this._syncIconControls();
     }
   }
 
@@ -479,6 +498,9 @@ class FicheroPrinterCard extends HTMLElement {
     }
 
     for (const button of root.querySelectorAll("button")) button.disabled = this._busy;
+    // The blanket line above would re-enable the buttons that are waiting for a
+    // picture, so the drawing state has the last word.
+    this._syncIconControls();
   }
 
   _buildFavorites(favorites, storedFavorites) {
