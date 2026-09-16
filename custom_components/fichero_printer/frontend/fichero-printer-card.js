@@ -148,6 +148,7 @@ class FicheroPrinterCard extends HTMLElement {
         <div class="row">
           <label><input id="with-icon" type="checkbox"> Icon</label>
           <input id="icon" type="text" placeholder="mdi:pasta">
+          <button id="suggest-icon">Suggest</button>
           <button class="primary" id="print">Print</button>
           <button id="favorite">&#9734; Save favorite</button>
         </div>
@@ -182,6 +183,8 @@ class FicheroPrinterCard extends HTMLElement {
       this._schedulePreview();
     });
 
+    root.getElementById("suggest-icon").onclick = () => this._suggestIcon();
+
     const date = root.getElementById("date");
     date.value = this._date;
     date.disabled = !this._withDate;
@@ -198,6 +201,35 @@ class FicheroPrinterCard extends HTMLElement {
     });
     this._built = true;
     this._schedulePreview();
+  }
+
+  async _suggestIcon() {
+    const state = this._entityId && this._hass?.states[this._entityId];
+    if (!state) return;
+    const root = this.shadowRoot;
+    const error = root.getElementById("preview-error");
+    this._busy = true;
+    this._render();
+    try {
+      const result = await this._hass.callWS({
+        type: "fichero_printer/suggest_icon",
+        config_entry_id: state.attributes.config_entry_id,
+        text: this._text,
+      });
+      this._icon = result.icon;
+      this._withIcon = true;
+      root.getElementById("icon").value = result.icon;
+      root.getElementById("icon").disabled = false;
+      root.getElementById("with-icon").checked = true;
+      error.hidden = true;
+      this._schedulePreview();
+    } catch (err) {
+      error.textContent = err?.message || String(err);
+      error.hidden = false;
+    } finally {
+      this._busy = false;
+      this._render();
+    }
   }
 
   _schedulePreview() {

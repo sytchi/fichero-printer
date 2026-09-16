@@ -18,6 +18,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CARD_URL,
+    CONF_AI_TASK_ENTITY,
     CONF_LABEL_LENGTH,
     DEFAULT_MARGIN_MM,
     DOMAIN,
@@ -29,7 +30,7 @@ from .const import (
     SERVICE_SAVE_FAVORITE,
 )
 from .manager import FicheroManager
-from .render import DOTS_PER_MM, render_preview_png
+from .render import DOTS_PER_MM, icon_character, render_preview_png
 
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -50,6 +51,71 @@ SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Exclusive("index", "favorite"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
+
+
+ICON_INSTRUCTIONS = (
+    "Pick the single Material Design Icons (MDI) icon that best illustrates this "
+    "label for a household storage container. Answer with the bare icon name as "
+    "used in Home Assistant without the mdi: prefix, for example pasta, "
+    "bowl-mix, cupcake or fridge-outline. The name must be a real MDI icon. "
+    "Label text: "
+)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "fichero_printer/suggest_icon",
+        vol.Required("config_entry_id"): cv.string,
+        vol.Required("text"): cv.string,
+    }
+)
+@websocket_api.async_response
+async def websocket_suggest_icon(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Ask the configured AI Task entity for an icon that fits the label."""
+    entry = hass.config_entries.async_get_entry(msg["config_entry_id"])
+    if entry is None or entry.domain != DOMAIN:
+        connection.send_error(
+            msg["id"], "not_found", "Fichero printer configuration is not loaded"
+        )
+        return
+    ai_task_entity = entry.data.get(CONF_AI_TASK_ENTITY)
+    if not ai_task_entity:
+        connection.send_error(
+            msg["id"],
+            "not_configured",
+            "No AI Task entity is configured for this printer",
+        )
+        return
+    if not msg["text"].strip():
+        connection.send_error(msg["id"], "invalid_label", "Label text cannot be empty")
+        return
+    try:
+        result = await hass.services.async_call(
+            "ai_task",
+            "generate_data",
+            {
+                "entity_id": ai_task_entity,
+                "task_name": "Fichero label icon",
+                "instructions": ICON_INSTRUCTIONS + msg["text"].strip(),
+                "structure": {"icon": {"selector": {"text": {}}}},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    except HomeAssistantError as err:
+        connection.send_error(msg["id"], "ai_task_failed", str(err))
+        return
+    suggestion = str((result or {}).get("data", {}).get("icon", "")).strip()
+    try:
+        icon_character(suggestion)
+    except ValueError:
+        connection.send_error(
+            msg["id"],
+            "invalid_icon",
+            f"The AI Task suggested {suggestion or 'nothing'}, which is not an MDI icon",
+        )
+        return
+    connection.send_result(msg["id"], {"icon": f"mdi:{suggestion.removeprefix('mdi:')}"})
 
 
 @websocket_api.websocket_command(
@@ -136,6 +202,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_SAVE_FAVORITE, handle_save, schema=SERVICE_SAVE_FAVORITE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_FAVORITE, handle_delete, schema=SERVICE_DELETE_FAVORITE_SCHEMA)
     websocket_api.async_register_command(hass, websocket_preview)
+    websocket_api.async_register_command(hass, websocket_suggest_icon)
     return True
 
 

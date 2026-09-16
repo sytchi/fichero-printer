@@ -10,6 +10,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ADDRESS,
+    CONF_AI_TASK_ENTITY,
     CONF_DENSITY,
     CONF_LABEL_LENGTH,
     CONF_POWER_OFF_ON_DISCONNECT,
@@ -49,6 +50,9 @@ class FicheroConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Required(CONF_DENSITY, default=DEFAULT_DENSITY): vol.In([0, 1, 2]),
                 vol.Required(CONF_POWER_OFF_ON_DISCONNECT, default=True): bool,
+                vol.Optional(CONF_AI_TASK_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="ai_task")
+                ),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
