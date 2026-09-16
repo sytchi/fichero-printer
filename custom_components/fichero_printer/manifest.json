@@ -8,7 +8,8 @@
   "dependencies": [
     "bluetooth_adapters",
     "frontend",
-    "http"
+    "http",
+    "websocket_api"
   ],
   "documentation": "https://github.com/jonathan-shc/fichero-printer",
   "integration_type": "device",

@@ -1,5 +1,7 @@
 """Dependency-light label renderer, kept separate for unit testing."""
 
+from io import BytesIO
+
 from PIL import Image, ImageDraw, ImageFont
 
 PRINTHEAD_PX = 96
@@ -10,6 +12,8 @@ DEFAULT_MAX_LINES = 3
 # stays readable on a shelf.
 DATE_SIZE_RATIO = 0.55
 TITLE_STROKE = 1
+# Labels are tiny, so the on-screen preview is scaled up.
+PREVIEW_SCALE = 2
 
 
 def _line_width(draw, text: str, font, stroke: int = 0) -> int:
@@ -47,15 +51,15 @@ def _block_height(draw, lines: list[str], font, gap: int, stroke: int) -> int:
     return sum(_height(draw, line, font, stroke) for line in lines) + gap * (len(lines) - 1)
 
 
-def render_text_raster(
+def render_label_image(
     text: str,
     label_rows: int,
     margin_dots: int = DEFAULT_MARGIN_DOTS,
     offset_dots: int = 0,
     max_lines: int = DEFAULT_MAX_LINES,
     date: str | None = None,
-) -> bytes:
-    """Fit text at the largest size that fits, wrapping onto up to max_lines.
+) -> Image.Image:
+    """Lay the label out as it will be printed and return it as an image.
 
     `margin_dots` is the blank border kept on every side. `offset_dots` shifts
     the text along the label to compensate for a printer whose paper stops
@@ -143,6 +147,38 @@ def render_text_raster(
             font=date_font,
             fill=0,
         )
+    return canvas
+
+
+def render_text_raster(
+    text: str,
+    label_rows: int,
+    margin_dots: int = DEFAULT_MARGIN_DOTS,
+    offset_dots: int = 0,
+    max_lines: int = DEFAULT_MAX_LINES,
+    date: str | None = None,
+) -> bytes:
+    """Render the label and pack it the way the printer expects it."""
+    canvas = render_label_image(text, label_rows, margin_dots, offset_dots, max_lines, date)
     # Printer raster is 96 pixels wide and one row per dot along label length.
     rotated = canvas.rotate(90, expand=True)
     return bytes(byte ^ 0xFF for byte in rotated.tobytes())
+
+
+def render_preview_png(
+    text: str,
+    label_rows: int,
+    margin_dots: int = DEFAULT_MARGIN_DOTS,
+    offset_dots: int = 0,
+    max_lines: int = DEFAULT_MAX_LINES,
+    date: str | None = None,
+    scale: int = PREVIEW_SCALE,
+) -> bytes:
+    """Render the same layout the printer gets, as a PNG for the dashboard."""
+    canvas = render_label_image(text, label_rows, margin_dots, offset_dots, max_lines, date)
+    scale = max(1, int(scale))
+    if scale > 1:
+        canvas = canvas.resize((canvas.width * scale, canvas.height * scale), Image.NEAREST)
+    buffer = BytesIO()
+    canvas.convert("L").save(buffer, format="PNG")
+    return buffer.getvalue()

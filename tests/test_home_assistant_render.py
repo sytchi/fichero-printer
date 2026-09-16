@@ -1,6 +1,7 @@
 """Tests for Home Assistant label auto-fitting."""
 
 import importlib.util
+import io
 from pathlib import Path
 
 import pytest
@@ -220,3 +221,32 @@ def test_dated_label_respects_margins():
     columns = _ink_columns(raster)
     assert rows[0] >= 8 and rows[-1] <= 240 - 1 - 8
     assert columns[0] >= 8 and columns[-1] <= render.PRINTHEAD_PX - 1 - 8
+
+
+def test_preview_is_a_png_of_the_whole_label():
+    png = render.render_preview_png("Gnocchi chorizo", 240, date="16-09-2026")
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    image = render.Image.open(io.BytesIO(png))
+    assert image.size == (240 * render.PREVIEW_SCALE, render.PRINTHEAD_PX * render.PREVIEW_SCALE)
+
+
+def test_preview_and_print_share_one_layout():
+    image = render.render_label_image("Gnocchi chorizo", 240, date="16-09-2026")
+    raster = render.render_text_raster("Gnocchi chorizo", 240, date="16-09-2026")
+    rotated = image.rotate(90, expand=True)
+    assert raster == bytes(byte ^ 0xFF for byte in rotated.tobytes())
+
+
+def test_preview_keeps_the_label_size_at_scale_one():
+    image = render.Image.open(io.BytesIO(render.render_preview_png("Kitchen", 240, scale=1)))
+    assert image.size == (240, render.PRINTHEAD_PX)
+
+
+def test_preview_refuses_an_empty_label():
+    with pytest.raises(ValueError, match="cannot be empty"):
+        render.render_preview_png("", 240)
+
+
+def test_preview_refuses_text_that_cannot_fit():
+    with pytest.raises(ValueError, match="cannot fit"):
+        render.render_preview_png("Unbreakable" * 40, 240)

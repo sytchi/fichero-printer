@@ -8,6 +8,7 @@ class FicheroPrinterCard extends HTMLElement {
     this._hiddenFavorites = new Set();
     this._built = false;
     this._favoritesKey = null;
+    this._previewTimer = null;
     this._withDate = false;
     this._date = this._localDate();
   }
@@ -122,6 +123,8 @@ class FicheroPrinterCard extends HTMLElement {
         .favorite { display:inline-flex; align-items:stretch; margin:0 8px 8px 0; background:var(--secondary-background-color); border-radius:10px; overflow:hidden; }
         .favorite button { border-radius:0; margin:0; }
         .favorite .remove { padding:8px; color:var(--secondary-text-color); }
+        #preview { display:block; width:100%; margin-bottom:12px; border:1px solid var(--divider-color); border-radius:8px; background:#fff; image-rendering:pixelated; }
+        .preview-error { margin-bottom:12px; font-size:.9rem; color:var(--secondary-text-color); }
         .missing { padding:20px; }
       </style>
       <ha-card>
@@ -130,6 +133,8 @@ class FicheroPrinterCard extends HTMLElement {
           <button id="connection"></button>
         </div>
         <div class="error" id="error" hidden></div>
+        <img id="preview" alt="Label preview" hidden>
+        <div class="preview-error" id="preview-error" hidden></div>
         <textarea id="text" maxlength="500" placeholder="Text for your label"></textarea>
         <div class="row">
           <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
@@ -145,7 +150,10 @@ class FicheroPrinterCard extends HTMLElement {
       </ha-card>`;
 
     const root = this.shadowRoot;
-    root.getElementById("text").addEventListener("input", (event) => { this._text = event.target.value; });
+    root.getElementById("text").addEventListener("input", (event) => {
+      this._text = event.target.value;
+      this._schedulePreview();
+    });
     root.getElementById("copies").addEventListener("input", (event) => {
       this._copies = Math.max(1, Math.min(100, Number(event.target.value) || 1));
     });
@@ -155,14 +163,56 @@ class FicheroPrinterCard extends HTMLElement {
     const date = root.getElementById("date");
     date.value = this._date;
     date.disabled = !this._withDate;
-    date.addEventListener("input", (event) => { this._date = event.target.value; });
+    date.addEventListener("input", (event) => {
+      this._date = event.target.value;
+      this._schedulePreview();
+    });
     const withDate = root.getElementById("with-date");
     withDate.checked = this._withDate;
     withDate.addEventListener("change", (event) => {
       this._withDate = event.target.checked;
       date.disabled = !this._withDate;
+      this._schedulePreview();
     });
     this._built = true;
+    this._schedulePreview();
+  }
+
+  _schedulePreview() {
+    // Typing should not fire a render per keystroke.
+    clearTimeout(this._previewTimer);
+    this._previewTimer = setTimeout(() => this._refreshPreview(), 300);
+  }
+
+  async _refreshPreview() {
+    const state = this._entityId && this._hass?.states[this._entityId];
+    if (!state || !this.shadowRoot) return;
+    const preview = this.shadowRoot.getElementById("preview");
+    const error = this.shadowRoot.getElementById("preview-error");
+    const data = this._printData(this._text);
+    if (!data.text.trim() && !data.date) {
+      preview.hidden = true;
+      error.hidden = true;
+      return;
+    }
+    const message = {
+      type: "fichero_printer/preview",
+      config_entry_id: state.attributes.config_entry_id,
+      text: data.text,
+      date: data.date || "",
+    };
+    if (data.margin_mm !== undefined) message.margin_mm = data.margin_mm;
+    if (data.offset_mm !== undefined) message.offset_mm = data.offset_mm;
+    try {
+      const result = await this._hass.callWS(message);
+      preview.src = `data:image/png;base64,${result.png}`;
+      preview.hidden = false;
+      error.hidden = true;
+    } catch (err) {
+      preview.hidden = true;
+      error.textContent = err?.message || String(err);
+      error.hidden = false;
+    }
   }
 
   _update(state) {

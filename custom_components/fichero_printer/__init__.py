@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+from functools import partial
 from pathlib import Path
 
 import voluptuous as vol
 
+from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -15,6 +18,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CARD_URL,
+    CONF_LABEL_LENGTH,
     DEFAULT_MARGIN_MM,
     DOMAIN,
     PLATFORMS,
@@ -25,6 +29,7 @@ from .const import (
     SERVICE_SAVE_FAVORITE,
 )
 from .manager import FicheroManager
+from .render import DOTS_PER_MM, render_preview_png
 
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -44,6 +49,42 @@ SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Exclusive("index", "favorite"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "fichero_printer/preview",
+        vol.Required("config_entry_id"): cv.string,
+        vol.Optional("text", default=""): cv.string,
+        vol.Optional("date", default=""): cv.string,
+        vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
+        vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
+    }
+)
+@websocket_api.async_response
+async def websocket_preview(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Return the label as a PNG, rendered by the same code that prints it."""
+    entry = hass.config_entries.async_get_entry(msg["config_entry_id"])
+    if entry is None or entry.domain != DOMAIN:
+        connection.send_error(
+            msg["id"], "not_found", "Fichero printer configuration is not loaded"
+        )
+        return
+    try:
+        png = await hass.async_add_executor_job(
+            partial(
+                render_preview_png,
+                msg["text"],
+                entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM,
+                margin_dots=round(msg["margin_mm"] * DOTS_PER_MM),
+                offset_dots=round(msg["offset_mm"] * DOTS_PER_MM),
+                date=msg["date"],
+            )
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_label", str(err))
+        return
+    connection.send_result(msg["id"], {"png": base64.b64encode(png).decode("ascii")})
 
 
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
@@ -90,6 +131,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_PRINT, handle_print, schema=SERVICE_PRINT_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_SAVE_FAVORITE, handle_save, schema=SERVICE_SAVE_FAVORITE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_FAVORITE, handle_delete, schema=SERVICE_DELETE_FAVORITE_SCHEMA)
+    websocket_api.async_register_command(hass, websocket_preview)
     return True
 
 
