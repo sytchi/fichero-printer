@@ -26,7 +26,7 @@ from .const import (
     DEFAULT_MARGIN_MM,
     DEFAULT_STARTUP_DELAY,
 )
-from .render import render_text_raster
+from .render import DEFAULT_ICON_SIDE, render_text_raster
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_UUID = "00002af1-0000-1000-8000-00805f9b34fb"
@@ -393,6 +393,7 @@ class FicheroManager:
         offset_mm: float = 0.0,
         date: str = "",
         icon: str = "",
+        icon_side: str = DEFAULT_ICON_SIDE,
     ) -> None:
         text = text.strip()
         date = date.strip()
@@ -415,6 +416,7 @@ class FicheroManager:
                     offset_dots=round(offset_mm * DOTS_PER_MM),
                     date=date,
                     icon=icon,
+                    icon_side=icon_side,
                 )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)

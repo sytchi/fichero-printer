@@ -352,3 +352,61 @@ def test_missing_icon_data_is_not_cached(tmp_path, monkeypatch):
         assert render._icon_codepoints() == {"pasta": 987000}
     finally:
         render._ICON_CODEPOINTS.clear()
+
+
+def test_icon_moves_with_the_offset():
+    still = _ink_rows(render.render_text_raster("Kurczak", 240, icon="mdi:food", offset_dots=0))
+    moved = _ink_rows(render.render_text_raster("Kurczak", 240, icon="mdi:food", offset_dots=16))
+    # The pictogram sits at the far end of the printed block, so the extreme
+    # row belongs to it; a positive offset has to carry it along with the text.
+    assert still[-1] - moved[-1] == 16
+
+
+def _ink_halves(raster, label_rows=240):
+    """Ink in the first and second half of the printed rows."""
+    row_bytes = len(raster) // label_rows
+    half = label_rows // 2
+    def count(start, end):
+        return sum(
+            bin(byte).count("1")
+            for row in range(start, end)
+            for byte in raster[row * row_bytes:(row + 1) * row_bytes]
+        )
+    return count(0, half), count(half, label_rows)
+
+
+def test_icon_side_swaps_the_ends():
+    left = _ink_halves(render.render_text_raster("Kurczak", 240, icon="mdi:food", icon_side="left"))
+    right = _ink_halves(render.render_text_raster("Kurczak", 240, icon="mdi:food", icon_side="right"))
+    # Both layouts span the whole label, so the ends say nothing; the filled
+    # pictogram carries far more ink than the text, so it is the heavier half
+    # and it has to swap halves with the option.
+    assert left[1] > left[0] * 2
+    assert right[0] > right[1] * 2
+
+
+def test_icon_side_default_is_left():
+    assert render.DEFAULT_ICON_SIDE == "left"
+    assert _ink_rows(render.render_text_raster("Kurczak", 240, icon="mdi:food")) == _ink_rows(
+        render.render_text_raster("Kurczak", 240, icon="mdi:food", icon_side="left")
+    )
+
+
+def test_unknown_icon_side_is_rejected():
+    with pytest.raises(ValueError, match="Icon side"):
+        render.render_text_raster("Kurczak", 240, icon="mdi:food", icon_side="middle")
+
+
+def test_icon_and_text_never_overlap_with_an_offset():
+    icon_size = render.PRINTHEAD_PX - 2 * 8
+    for side in ("left", "right"):
+        for offset in (-24, 0, 24):
+            rows = _ink_rows(
+                render.render_text_raster(
+                    "Kurczak", 240, margin_dots=8, icon="mdi:food", icon_side=side, offset_dots=offset
+                )
+            )
+            assert rows[0] >= 8
+            assert rows[-1] <= 240 - 1 - 8
+            # Enough ink for both blocks means neither was clipped away.
+            assert rows[-1] - rows[0] > icon_size

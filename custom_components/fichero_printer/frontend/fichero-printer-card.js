@@ -11,6 +11,7 @@ class FicheroPrinterCard extends HTMLElement {
     this._previewTimer = null;
     this._withIcon = false;
     this._icon = "";
+    this._iconSide = "left";
     this._withDate = false;
     this._date = this._localDate();
   }
@@ -79,7 +80,10 @@ class FicheroPrinterCard extends HTMLElement {
   _printData(text) {
     const data = { text, copies: this._copies };
     if (this._withDate) data.date = this._printedDate();
-    if (this._withIcon && this._icon.trim()) data.icon = this._icon.trim();
+    if (this._withIcon && this._icon.trim()) {
+      data.icon = this._icon.trim();
+      data.icon_side = this._iconSide;
+    }
     const margin = Number(this._config?.margin_mm);
     const offset = Number(this._config?.offset_mm);
     if (Number.isFinite(margin)) data.margin_mm = margin;
@@ -119,6 +123,8 @@ class FicheroPrinterCard extends HTMLElement {
         label { display:flex; align-items:center; gap:8px; color:var(--secondary-text-color); }
         input[type=number] { width:64px; padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); }
         input[type=text] { flex:1; min-width:120px; padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
+        select { padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
+        select:disabled { opacity:.55; }
         input[type=date] { padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
         input[type=date]:disabled { opacity:.55; }
         .favorites { margin-top:16px; border-top:1px solid var(--divider-color); padding-top:14px; }
@@ -127,6 +133,7 @@ class FicheroPrinterCard extends HTMLElement {
         .favorite { display:inline-flex; align-items:stretch; margin:0 8px 8px 0; background:var(--secondary-background-color); border-radius:10px; overflow:hidden; }
         .favorite button { border-radius:0; margin:0; }
         .favorite .remove { padding:8px; color:var(--secondary-text-color); }
+        #preview[hidden] { display:none; }
         #preview { display:block; width:100%; margin-bottom:12px; border:1px solid var(--divider-color); border-radius:8px; background:#fff; image-rendering:pixelated; }
         .preview-error { margin-bottom:12px; font-size:.9rem; color:var(--secondary-text-color); }
         .missing { padding:20px; }
@@ -149,6 +156,10 @@ class FicheroPrinterCard extends HTMLElement {
           <label><input id="with-icon" type="checkbox"> Icon</label>
           <input id="icon" type="text" placeholder="mdi:pasta">
           <button id="suggest-icon">Suggest</button>
+          <select id="icon-side" aria-label="Icon side">
+            <option value="left">Icon left</option>
+            <option value="right">Icon right</option>
+          </select>
           <button class="primary" id="print">Print</button>
           <button id="favorite">&#9734; Save favorite</button>
         </div>
@@ -175,11 +186,20 @@ class FicheroPrinterCard extends HTMLElement {
       this._icon = event.target.value;
       this._schedulePreview();
     });
+    const iconSide = root.getElementById("icon-side");
+    iconSide.value = this._iconSide;
+    iconSide.disabled = !this._withIcon;
+    iconSide.addEventListener("change", (event) => {
+      this._iconSide = event.target.value;
+      this._schedulePreview();
+    });
+
     const withIcon = root.getElementById("with-icon");
     withIcon.checked = this._withIcon;
     withIcon.addEventListener("change", (event) => {
       this._withIcon = event.target.checked;
       icon.disabled = !this._withIcon;
+      iconSide.disabled = !this._withIcon;
       this._schedulePreview();
     });
 
@@ -255,7 +275,10 @@ class FicheroPrinterCard extends HTMLElement {
       text: data.text,
       date: data.date || "",
     };
-    if (data.icon) message.icon = data.icon;
+    if (data.icon) {
+      message.icon = data.icon;
+      message.icon_side = data.icon_side;
+    }
     if (data.margin_mm !== undefined) message.margin_mm = data.margin_mm;
     if (data.offset_mm !== undefined) message.offset_mm = data.offset_mm;
     try {

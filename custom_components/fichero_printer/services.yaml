@@ -41,9 +41,18 @@ print_label:
         text:
     icon:
       name: Icon
-      description: Material Design Icons name printed at the right-hand end of the label.
+      description: Material Design Icons name printed next to the text.
       selector:
         icon:
+    icon_side:
+      name: Icon side
+      description: Which end of the label the pictogram is printed on.
+      default: left
+      selector:
+        select:
+          options:
+            - left
+            - right
     copies:
       name: Copies
       default: 1

@@ -19,6 +19,8 @@ DATE_SIZE_RATIO = 0.55
 MIN_DATE_DOTS = 12
 # Labels are tiny, so the on-screen preview is scaled up.
 PREVIEW_SCALE = 2
+ICON_SIDES = ("left", "right")
+DEFAULT_ICON_SIDE = "left"
 
 # Pillow's built-in font only covers basic Latin: every accented character came
 # out as a box on the tape. The bundled DejaVu faces carry the accents and give
@@ -26,9 +28,9 @@ PREVIEW_SCALE = 2
 FONT_DIR = Path(__file__).parent / "fonts"
 FONTS = {False: FONT_DIR / "DejaVuSans.ttf", True: FONT_DIR / "DejaVuSans-Bold.ttf"}
 # Home Assistant keeps its Material Design Icons in the frontend, so the
-# integration carries the webfont to be able to draw one on the tape.
-# Some file transports refuse to create the subdirectory, so the assets are
-# also accepted next to the module itself.
+# integration carries the webfont to be able to draw one on the tape. Some file
+# transports refuse to create the subdirectory, so the assets are also accepted
+# next to the module itself.
 ICON_DIRS = (Path(__file__).parent / "icons", Path(__file__).parent)
 ICON_FONT_NAME = "materialdesignicons-webfont.ttf"
 ICON_CODEPOINTS_NAME = "mdi-codepoints.json"
@@ -128,23 +130,27 @@ def render_label_image(
     max_lines: int = DEFAULT_MAX_LINES,
     date: str | None = None,
     icon: str | None = None,
+    icon_side: str = DEFAULT_ICON_SIDE,
 ) -> Image.Image:
     """Lay the label out as it will be printed and return it as an image.
 
     `margin_dots` is the blank border kept on every side. `offset_dots` shifts
-    the text along the label to compensate for a printer whose paper stops
-    short of the label edge; positive values move the text to the right as the
-    label is read. The shift is reserved before the text is sized, so text that
-    fills the label can still move, and it is never printed past the margin.
-    `date` is printed in a smaller font on its own line under the text, which
-    is then printed bold. `icon` is a Material Design Icons name printed as a
-    square pictogram at the right-hand end of the label.
+    everything that is printed along the label to compensate for a printer
+    whose paper stops short of the label edge; positive values move it to the
+    right as the label is read. The shift is reserved before the text is sized,
+    so text that fills the label can still move, and nothing is printed past
+    the margin. `date` is printed in a smaller font on its own line under the
+    text, which is then printed bold. `icon` is a Material Design Icons name
+    printed as a square pictogram on the `icon_side` end of the label.
     """
     # Pasted line breaks and repeated whitespace are ordinary word separators;
     # where the text breaks is decided by whatever gives the largest letters.
     words = text.split()
     date = (date or "").strip()
     icon = (icon or "").strip()
+    side = (icon_side or DEFAULT_ICON_SIDE).strip().lower()
+    if side not in ICON_SIDES:
+        raise ValueError(f"Icon side must be one of {', '.join(ICON_SIDES)}")
     if not words and not date:
         raise ValueError("Text cannot be empty")
     max_lines = max(1, int(max_lines))
@@ -155,14 +161,14 @@ def render_label_image(
     if usable_height <= 0:
         raise ValueError("Margins leave no room for text")
 
-    # The pictogram is a square as tall as the printable strip, parked at the
-    # end of the label; the text gets whatever is left.
+    # The pictogram is a square as tall as the printable strip; the text gets
+    # whatever is left on the other side of it.
     icon_glyph = icon_character(icon) if icon else ""
     icon_size = usable_height if icon_glyph else 0
     icon_gap = margin_dots if icon_glyph else 0
 
-    full_span = label_rows - 2 * margin_dots - icon_size - icon_gap
-    span = full_span - abs(offset_dots)
+    text_area = label_rows - 2 * margin_dots - icon_size - icon_gap
+    span = text_area - abs(offset_dots)
     if span <= 0:
         raise ValueError("Margins leave no room for text")
 
@@ -205,11 +211,16 @@ def render_label_image(
     width = max(box[2] - box[0] for box in boxes)
     if date_box:
         width = max(width, date_box[2] - date_box[0])
-    start_row = margin_dots + (full_span - width) // 2 - offset_dots
-    start_row = max(margin_dots, min(start_row, label_rows - margin_dots - icon_size - icon_gap - width))
-    # Rows leave the printer in the opposite order to the canvas x axis, so the
-    # block is placed by mirroring its first printed row.
-    block_x = label_rows - 1 - start_row - width
+
+    # Canvas x runs the way the label is read, so the offset is simply added to
+    # every block and then clamped inside the printable strip.
+    def place(block_width: int, left_edge: int) -> int:
+        shifted = left_edge + offset_dots
+        return max(margin_dots, min(shifted, label_rows - margin_dots - block_width))
+
+    text_left = margin_dots + (icon_size + icon_gap if side == "left" else 0)
+    block_x = place(width, text_left + (text_area - width) // 2)
+    icon_left = margin_dots if side == "left" else label_rows - margin_dots - icon_size
     y = (PRINTHEAD_PX - height) // 2
     for line, box in zip(lines, boxes):
         draw.text(
@@ -229,7 +240,7 @@ def render_label_image(
     if icon_glyph:
         icon_font = _icon_font(icon_size)
         icon_box = draw.textbbox((0, 0), icon_glyph, font=icon_font)
-        icon_x = margin_dots + (icon_size - (icon_box[2] - icon_box[0])) // 2 - icon_box[0]
+        icon_x = place(icon_size, icon_left) + (icon_size - (icon_box[2] - icon_box[0])) // 2 - icon_box[0]
         icon_y = margin_dots + (usable_height - (icon_box[3] - icon_box[1])) // 2 - icon_box[1]
         draw.text((icon_x, icon_y), icon_glyph, font=icon_font, fill=0)
     return canvas
@@ -243,9 +254,12 @@ def render_text_raster(
     max_lines: int = DEFAULT_MAX_LINES,
     date: str | None = None,
     icon: str | None = None,
+    icon_side: str = DEFAULT_ICON_SIDE,
 ) -> bytes:
     """Render the label and pack it the way the printer expects it."""
-    canvas = render_label_image(text, label_rows, margin_dots, offset_dots, max_lines, date, icon)
+    canvas = render_label_image(
+        text, label_rows, margin_dots, offset_dots, max_lines, date, icon, icon_side
+    )
     # Printer raster is 96 pixels wide and one row per dot along label length.
     rotated = canvas.rotate(90, expand=True)
     return bytes(byte ^ 0xFF for byte in rotated.tobytes())
@@ -259,10 +273,13 @@ def render_preview_png(
     max_lines: int = DEFAULT_MAX_LINES,
     date: str | None = None,
     icon: str | None = None,
+    icon_side: str = DEFAULT_ICON_SIDE,
     scale: int = PREVIEW_SCALE,
 ) -> bytes:
     """Render the same layout the printer gets, as a PNG for the dashboard."""
-    canvas = render_label_image(text, label_rows, margin_dots, offset_dots, max_lines, date, icon)
+    canvas = render_label_image(
+        text, label_rows, margin_dots, offset_dots, max_lines, date, icon, icon_side
+    )
     scale = max(1, int(scale))
     if scale > 1:
         canvas = canvas.resize((canvas.width * scale, canvas.height * scale), Image.NEAREST)

@@ -30,7 +30,13 @@ from .const import (
     SERVICE_SAVE_FAVORITE,
 )
 from .manager import FicheroManager
-from .render import DOTS_PER_MM, icon_character, render_preview_png
+from .render import (
+    DEFAULT_ICON_SIDE,
+    DOTS_PER_MM,
+    ICON_SIDES,
+    icon_character,
+    render_preview_png,
+)
 
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -42,6 +48,7 @@ SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
         vol.Optional("date", default=""): cv.string,
         vol.Optional("icon", default=""): cv.string,
+        vol.Optional("icon_side", default=DEFAULT_ICON_SIDE): vol.In(ICON_SIDES),
     }
 )
 SERVICE_SAVE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
@@ -155,6 +162,7 @@ async def websocket_suggest_icon(hass: HomeAssistant, connection, msg: dict) -> 
         vol.Optional("text", default=""): cv.string,
         vol.Optional("date", default=""): cv.string,
         vol.Optional("icon", default=""): cv.string,
+        vol.Optional("icon_side", default=DEFAULT_ICON_SIDE): vol.In(ICON_SIDES),
         vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
         vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
     }
@@ -178,6 +186,7 @@ async def websocket_preview(hass: HomeAssistant, connection, msg: dict) -> None:
                 offset_dots=round(msg["offset_mm"] * DOTS_PER_MM),
                 date=msg["date"],
                 icon=msg["icon"],
+                icon_side=msg["icon_side"],
             )
         )
     except ValueError as err:
@@ -216,6 +225,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
             call.data["offset_mm"],
             call.data["date"],
             call.data["icon"],
+            call.data["icon_side"],
         )
 
     async def handle_save(call: ServiceCall) -> None:
