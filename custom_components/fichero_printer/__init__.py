@@ -134,6 +134,9 @@ async def _label_subject(hass: HomeAssistant, entry, text: str) -> str:
         vol.Required("config_entry_id"): cv.string,
         vol.Required("mode"): vol.In(ARTWORK_MODES),
         vol.Optional("text", default=""): cv.string,
+        vol.Optional("length_mm"): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_LABEL_LENGTH, max=MAX_LABEL_LENGTH)
+        ),
     }
 )
 @websocket_api.async_response
@@ -163,9 +166,11 @@ async def websocket_generate_artwork(hass: HomeAssistant, connection, msg: dict)
         band = False
     else:
         subject = text
-        prompt = ARTWORK_PROMPT.format(description=text)
-        rows = entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM
+        # A picture drawn for a 60 mm tape looks nothing like one for a 25 mm
+        # tape, so the shape of the strip goes into the prompt as well.
+        rows = round((msg.get("length_mm") or entry.data[CONF_LABEL_LENGTH]) * DOTS_PER_MM)
         box = (rows - 2 * DOTS_PER_MM, PRINTHEAD_PX - 2 * DOTS_PER_MM)
+        prompt = ARTWORK_PROMPT.format(description=text, aspect=max(1, round(box[0] / box[1])))
         band = True
 
     try:

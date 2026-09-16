@@ -356,6 +356,7 @@ class FicheroPrinterCard extends HTMLElement {
         config_entry_id: state.attributes.config_entry_id,
         mode,
         text: source,
+        ...(Number.isFinite(this._lengthMm) ? { length_mm: this._lengthMm } : {}),
       });
       this._artwork = result.artwork;
       this._artworkMode = mode;
