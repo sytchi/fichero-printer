@@ -44,6 +44,20 @@ print_label:
       description: Material Design Icons name printed next to the text.
       selector:
         icon:
+    artwork:
+      name: Artwork
+      description: Base64 PNG printed instead of the pictogram, or on its own in full mode.
+      selector:
+        text:
+    artwork_mode:
+      name: Artwork mode
+      description: Whether the picture replaces the pictogram or fills the whole label.
+      default: icon
+      selector:
+        select:
+          options:
+            - icon
+            - full
     icon_side:
       name: Icon side
       description: Which end of the label the pictogram is printed on.

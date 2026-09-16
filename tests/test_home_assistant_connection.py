@@ -355,7 +355,17 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
     manager._send_chunked = AsyncMock()
     captured = {}
 
-    def fake_render(text, rows, margin_dots=8, offset_dots=0, date="", icon="", icon_side="left"):
+    def fake_render(
+        text,
+        rows,
+        margin_dots=8,
+        offset_dots=0,
+        date="",
+        icon="",
+        icon_side="left",
+        artwork=None,
+        artwork_mode="icon",
+    ):
         captured.update(
             text=text,
             rows=rows,
@@ -364,6 +374,8 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
             date=date,
             icon=icon,
             icon_side=icon_side,
+            artwork=artwork,
+            artwork_mode=artwork_mode,
         )
         return b""
 
@@ -387,4 +399,6 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
         "date": "16-09-2026",
         "icon": "mdi:pasta",
         "icon_side": "right",
+        "artwork": None,
+        "artwork_mode": "icon",
     }

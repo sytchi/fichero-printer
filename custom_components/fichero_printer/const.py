@@ -10,6 +10,7 @@ CONF_LABEL_LENGTH = "label_length"
 CONF_DENSITY = "density"
 CONF_POWER_OFF_ON_DISCONNECT = "power_off_on_disconnect"
 CONF_AI_TASK_ENTITY = "ai_task_entity"
+CONF_AI_IMAGE_ENTITY = "ai_image_entity"
 
 DEFAULT_STARTUP_DELAY = 3.0
 DEFAULT_LABEL_LENGTH = 30

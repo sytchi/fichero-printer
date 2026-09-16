@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections.abc import Callable
 import logging
 
@@ -26,7 +27,7 @@ from .const import (
     DEFAULT_MARGIN_MM,
     DEFAULT_STARTUP_DELAY,
 )
-from .render import DEFAULT_ICON_SIDE, render_text_raster
+from .render import DEFAULT_ARTWORK_MODE, DEFAULT_ICON_SIDE, render_text_raster
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_UUID = "00002af1-0000-1000-8000-00805f9b34fb"
@@ -394,10 +395,13 @@ class FicheroManager:
         date: str = "",
         icon: str = "",
         icon_side: str = DEFAULT_ICON_SIDE,
+        artwork: str = "",
+        artwork_mode: str = DEFAULT_ARTWORK_MODE,
     ) -> None:
         text = text.strip()
         date = date.strip()
-        if not text and not date:
+        picture = base64.b64decode(artwork) if artwork else None
+        if picture is None and not text and not date:
             raise HomeAssistantError("Label text cannot be empty")
         if not 1 <= copies <= 100:
             raise HomeAssistantError("Copies must be between 1 and 100")
@@ -417,6 +421,8 @@ class FicheroManager:
                     date=date,
                     icon=icon,
                     icon_side=icon_side,
+                    artwork=picture,
+                    artwork_mode=artwork_mode,
                 )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)

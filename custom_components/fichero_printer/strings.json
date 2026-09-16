@@ -12,6 +12,7 @@
           "label_length": "Label length (mm)",
           "density": "Print density",
           "ai_task_entity": "AI Task entity that picks label icons (optional)",
+          "ai_image_entity": "AI Task entity that draws label pictures (optional)",
           "power_off_on_disconnect": "Press SwitchBot when disconnecting"
         }
       }

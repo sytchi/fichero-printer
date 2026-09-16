@@ -12,6 +12,9 @@ class FicheroPrinterCard extends HTMLElement {
     this._withIcon = false;
     this._icon = "";
     this._iconSide = "left";
+    this._artwork = "";
+    this._artworkMode = "icon";
+    this._artworkPrompt = "";
     this._withDate = false;
     this._date = this._localDate();
   }
@@ -84,6 +87,11 @@ class FicheroPrinterCard extends HTMLElement {
       data.icon = this._icon.trim();
       data.icon_side = this._iconSide;
     }
+    if (this._artwork) {
+      data.artwork = this._artwork;
+      data.artwork_mode = this._artworkMode;
+      if (this._artworkMode === "icon") data.icon_side = this._iconSide;
+    }
     const margin = Number(this._config?.margin_mm);
     const offset = Number(this._config?.offset_mm);
     if (Number.isFinite(margin)) data.margin_mm = margin;
@@ -153,6 +161,12 @@ class FicheroPrinterCard extends HTMLElement {
           <input id="date" type="date">
         </div>
         <div class="row">
+          <input id="artwork-prompt" type="text" placeholder="Picture for the whole label">
+          <button id="draw-artwork">Draw label</button>
+          <button id="draw-icon">Draw icon</button>
+          <button id="clear-artwork" hidden>Clear picture</button>
+        </div>
+        <div class="row">
           <label><input id="with-icon" type="checkbox"> Icon</label>
           <input id="icon" type="text" placeholder="mdi:pasta">
           <button id="suggest-icon">Suggest</button>
@@ -204,6 +218,16 @@ class FicheroPrinterCard extends HTMLElement {
     });
 
     root.getElementById("suggest-icon").onclick = () => this._suggestIcon();
+    root.getElementById("artwork-prompt").addEventListener("input", (event) => {
+      this._artworkPrompt = event.target.value;
+    });
+    root.getElementById("draw-icon").onclick = () => this._drawArtwork("icon");
+    root.getElementById("draw-artwork").onclick = () => this._drawArtwork("full");
+    root.getElementById("clear-artwork").onclick = () => {
+      this._artwork = "";
+      root.getElementById("clear-artwork").hidden = true;
+      this._schedulePreview();
+    };
 
     const date = root.getElementById("date");
     date.value = this._date;
@@ -221,6 +245,42 @@ class FicheroPrinterCard extends HTMLElement {
     });
     this._built = true;
     this._schedulePreview();
+  }
+
+  async _drawArtwork(mode) {
+    const state = this._entityId && this._hass?.states[this._entityId];
+    if (!state) return;
+    const root = this.shadowRoot;
+    const error = root.getElementById("preview-error");
+    const source = mode === "icon" ? this._text : this._artworkPrompt;
+    if (!source.trim()) {
+      error.textContent = mode === "icon"
+        ? "Type the label text first."
+        : "Describe the picture first.";
+      error.hidden = false;
+      return;
+    }
+    this._busy = true;
+    this._render();
+    try {
+      const result = await this._hass.callWS({
+        type: "fichero_printer/generate_artwork",
+        config_entry_id: state.attributes.config_entry_id,
+        mode,
+        text: source,
+      });
+      this._artwork = result.artwork;
+      this._artworkMode = mode;
+      root.getElementById("clear-artwork").hidden = false;
+      error.hidden = true;
+      this._schedulePreview();
+    } catch (err) {
+      error.textContent = err?.message || String(err);
+      error.hidden = false;
+    } finally {
+      this._busy = false;
+      this._render();
+    }
   }
 
   async _suggestIcon() {
@@ -264,7 +324,7 @@ class FicheroPrinterCard extends HTMLElement {
     const preview = this.shadowRoot.getElementById("preview");
     const error = this.shadowRoot.getElementById("preview-error");
     const data = this._printData(this._text);
-    if (!data.text.trim() && !data.date) {
+    if (!data.artwork && !data.text.trim() && !data.date) {
       preview.hidden = true;
       error.hidden = true;
       return;
@@ -278,6 +338,10 @@ class FicheroPrinterCard extends HTMLElement {
     if (data.icon) {
       message.icon = data.icon;
       message.icon_side = data.icon_side;
+    }
+    if (data.artwork) {
+      message.artwork = data.artwork;
+      message.artwork_mode = data.artwork_mode;
     }
     if (data.margin_mm !== undefined) message.margin_mm = data.margin_mm;
     if (data.offset_mm !== undefined) message.offset_mm = data.offset_mm;

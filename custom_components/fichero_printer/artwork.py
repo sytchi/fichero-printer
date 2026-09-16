@@ -98,6 +98,13 @@ def to_printable(
     return canvas.point(lambda pixel: 255 if pixel > threshold else 0, mode="1")
 
 
+def to_png(image: Image.Image) -> bytes:
+    """Serialise a converted picture so it can travel as base64."""
+    buffer = BytesIO()
+    image.convert("L").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def ink_ratio(image: Image.Image) -> float:
     """Share of black pixels, used to spot an empty or flooded conversion."""
     histogram = image.convert("L").histogram()
