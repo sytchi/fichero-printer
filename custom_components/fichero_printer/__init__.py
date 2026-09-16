@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 
 import voluptuous as vol
 
@@ -12,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.loader import async_get_integration
 
 from .const import (
     CARD_URL,
@@ -46,8 +48,10 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
         [StaticPathConfig(CARD_URL, str(frontend_file), cache_headers=False)]
     )
     # The query string changes with releases so dashboards cannot keep serving
-    # an older card script from the browser cache after a HACS update.
-    add_extra_js_url(hass, f"{CARD_URL}?v=0.1.10")
+    # an older card script from the browser cache after a HACS update. Reading
+    # it from the manifest means it cannot be forgotten on the next release.
+    integration = await async_get_integration(hass, DOMAIN)
+    add_extra_js_url(hass, f"{CARD_URL}?v={quote(str(integration.version), safe='')}")
 
     def manager_for(call: ServiceCall) -> FicheroManager:
         entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])
