@@ -40,6 +40,7 @@ SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
         vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
         vol.Optional("date", default=""): cv.string,
+        vol.Optional("icon", default=""): cv.string,
     }
 )
 SERVICE_SAVE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
@@ -57,6 +58,7 @@ SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Required("config_entry_id"): cv.string,
         vol.Optional("text", default=""): cv.string,
         vol.Optional("date", default=""): cv.string,
+        vol.Optional("icon", default=""): cv.string,
         vol.Optional("margin_mm", default=DEFAULT_MARGIN_MM): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
         vol.Optional("offset_mm", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=-10, max=10)),
     }
@@ -79,6 +81,7 @@ async def websocket_preview(hass: HomeAssistant, connection, msg: dict) -> None:
                 margin_dots=round(msg["margin_mm"] * DOTS_PER_MM),
                 offset_dots=round(msg["offset_mm"] * DOTS_PER_MM),
                 date=msg["date"],
+                icon=msg["icon"],
             )
         )
     except ValueError as err:
@@ -116,6 +119,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
             call.data["margin_mm"],
             call.data["offset_mm"],
             call.data["date"],
+            call.data["icon"],
         )
 
     async def handle_save(call: ServiceCall) -> None:

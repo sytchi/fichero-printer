@@ -392,6 +392,7 @@ class FicheroManager:
         margin_mm: float = DEFAULT_MARGIN_MM,
         offset_mm: float = 0.0,
         date: str = "",
+        icon: str = "",
     ) -> None:
         text = text.strip()
         date = date.strip()
@@ -413,6 +414,7 @@ class FicheroManager:
                     margin_dots=round(margin_mm * DOTS_PER_MM),
                     offset_dots=round(offset_mm * DOTS_PER_MM),
                     date=date,
+                    icon=icon,
                 )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)

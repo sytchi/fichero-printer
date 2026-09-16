@@ -9,6 +9,8 @@ class FicheroPrinterCard extends HTMLElement {
     this._built = false;
     this._favoritesKey = null;
     this._previewTimer = null;
+    this._withIcon = false;
+    this._icon = "";
     this._withDate = false;
     this._date = this._localDate();
   }
@@ -77,6 +79,7 @@ class FicheroPrinterCard extends HTMLElement {
   _printData(text) {
     const data = { text, copies: this._copies };
     if (this._withDate) data.date = this._printedDate();
+    if (this._withIcon && this._icon.trim()) data.icon = this._icon.trim();
     const margin = Number(this._config?.margin_mm);
     const offset = Number(this._config?.offset_mm);
     if (Number.isFinite(margin)) data.margin_mm = margin;
@@ -115,6 +118,7 @@ class FicheroPrinterCard extends HTMLElement {
         button:disabled { opacity:.55; cursor:wait; }
         label { display:flex; align-items:center; gap:8px; color:var(--secondary-text-color); }
         input[type=number] { width:64px; padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); }
+        input[type=text] { flex:1; min-width:120px; padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
         input[type=date] { padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font:inherit; }
         input[type=date]:disabled { opacity:.55; }
         .favorites { margin-top:16px; border-top:1px solid var(--divider-color); padding-top:14px; }
@@ -140,6 +144,10 @@ class FicheroPrinterCard extends HTMLElement {
           <label>Labels <input id="copies" type="number" min="1" max="100" value="1"></label>
           <label><input id="with-date" type="checkbox"> Add date</label>
           <input id="date" type="date">
+        </div>
+        <div class="row">
+          <label><input id="with-icon" type="checkbox"> Icon</label>
+          <input id="icon" type="text" placeholder="mdi:pasta">
           <button class="primary" id="print">Print</button>
           <button id="favorite">&#9734; Save favorite</button>
         </div>
@@ -160,6 +168,20 @@ class FicheroPrinterCard extends HTMLElement {
     root.getElementById("connection").onclick = () => this._call(this._connected ? "disconnect" : "connect");
     root.getElementById("print").onclick = () => this._call("print_label", this._printData(this._text));
     root.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
+    const icon = root.getElementById("icon");
+    icon.disabled = !this._withIcon;
+    icon.addEventListener("input", (event) => {
+      this._icon = event.target.value;
+      this._schedulePreview();
+    });
+    const withIcon = root.getElementById("with-icon");
+    withIcon.checked = this._withIcon;
+    withIcon.addEventListener("change", (event) => {
+      this._withIcon = event.target.checked;
+      icon.disabled = !this._withIcon;
+      this._schedulePreview();
+    });
+
     const date = root.getElementById("date");
     date.value = this._date;
     date.disabled = !this._withDate;
@@ -201,6 +223,7 @@ class FicheroPrinterCard extends HTMLElement {
       text: data.text,
       date: data.date || "",
     };
+    if (data.icon) message.icon = data.icon;
     if (data.margin_mm !== undefined) message.margin_mm = data.margin_mm;
     if (data.offset_mm !== undefined) message.offset_mm = data.offset_mm;
     try {

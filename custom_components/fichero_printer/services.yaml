@@ -39,6 +39,11 @@ print_label:
       description: Printed in a smaller font on its own line under the text.
       selector:
         text:
+    icon:
+      name: Icon
+      description: Material Design Icons name printed at the right-hand end of the label.
+      selector:
+        icon:
     copies:
       name: Copies
       default: 1

@@ -283,3 +283,46 @@ def test_short_name_keeps_the_date_proportional(monkeypatch):
     date_font = calls[-1][2]
     assert date_font.size == render._date_size(title_font.size)
     assert date_font.size < title_font.size
+
+
+def test_icon_prints_at_the_end_of_the_label():
+    plain = _ink_rows(render.render_text_raster("Kurczak", 240))
+    with_icon = _ink_rows(render.render_text_raster("Kurczak", 240, icon="mdi:food"))
+    # The pictogram adds ink closer to the end of the label than the text alone.
+    assert with_icon[-1] > plain[-1]
+    assert with_icon[-1] <= 240 - 1 - 8
+
+
+def test_icon_leaves_the_text_its_own_space():
+    icon_size = render.PRINTHEAD_PX - 2 * 8
+    raster = render.render_text_raster("Kurczak", 240, margin_dots=8, icon="mdi:food")
+    rows = _ink_rows(raster)
+    icon_starts_at = 240 - 8 - icon_size
+    text_rows = [row for row in rows if row < icon_starts_at - 1]
+    assert text_rows, "text should still be printed"
+    # Nothing of the text may stray into the pictogram's square.
+    assert max(text_rows) < icon_starts_at
+
+
+def test_icon_name_works_with_and_without_the_prefix():
+    assert render.icon_character("mdi:pasta") == render.icon_character("pasta")
+    assert render.render_text_raster("Obiad", 240, icon="pasta") == render.render_text_raster(
+        "Obiad", 240, icon="mdi:pasta"
+    )
+
+
+def test_unknown_icon_is_rejected():
+    with pytest.raises(ValueError, match="Unknown icon"):
+        render.render_text_raster("Obiad", 240, icon="mdi:definitely-not-an-icon")
+
+
+def test_icon_changes_the_printed_label():
+    assert render.render_text_raster("Obiad", 240, icon="mdi:pasta") != render.render_text_raster(
+        "Obiad", 240, icon="mdi:snowflake"
+    )
+
+
+def test_icon_fits_next_to_a_dated_label():
+    raster = render.render_text_raster("Zupa ogórkowa", 240, date="16-09-2026", icon="mdi:bowl-mix")
+    assert len(raster) == 240 * 12
+    assert any(raster)

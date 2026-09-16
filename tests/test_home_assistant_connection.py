@@ -355,16 +355,23 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
     manager._send_chunked = AsyncMock()
     captured = {}
 
-    def fake_render(text, rows, margin_dots=8, offset_dots=0, date=""):
-        captured.update(text=text, rows=rows, margin=margin_dots, offset=offset_dots, date=date)
+    def fake_render(text, rows, margin_dots=8, offset_dots=0, date="", icon=""):
+        captured.update(
+            text=text, rows=rows, margin=margin_dots, offset=offset_dots, date=date, icon=icon
+        )
         return b""
 
     manager_module.render_text_raster = fake_render
-    asyncio.run(manager.async_print("Salt", 1, margin_mm=1.5, offset_mm=-2, date="16-09-2026"))
+    asyncio.run(
+        manager.async_print(
+            "Salt", 1, margin_mm=1.5, offset_mm=-2, date="16-09-2026", icon="mdi:pasta"
+        )
+    )
     assert captured == {
         "text": "Salt",
         "rows": 240,
         "margin": 12,
         "offset": -16,
         "date": "16-09-2026",
+        "icon": "mdi:pasta",
     }
