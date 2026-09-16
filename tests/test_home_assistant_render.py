@@ -2,13 +2,21 @@
 
 import importlib.util
 import io
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
-MODULE_PATH = Path(__file__).parents[1] / "custom_components" / "fichero_printer" / "render.py"
-SPEC = importlib.util.spec_from_file_location("fichero_render", MODULE_PATH)
+# The renderer imports its sibling modules, so it has to be loaded as part of
+# a package rather than as a loose file.
+ROOT = Path(__file__).parents[1] / "custom_components" / "fichero_printer"
+PACKAGE = ModuleType("fichero_render_pkg")
+PACKAGE.__path__ = [str(ROOT)]
+sys.modules.setdefault("fichero_render_pkg", PACKAGE)
+SPEC = importlib.util.spec_from_file_location("fichero_render_pkg.render", ROOT / "render.py")
 render = importlib.util.module_from_spec(SPEC)
+sys.modules["fichero_render_pkg.render"] = render
 SPEC.loader.exec_module(render)
 
 
