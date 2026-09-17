@@ -366,6 +366,16 @@ class FicheroManager:
             return
         await self._press_switchbot()
 
+    async def _drop_session(self) -> None:
+        """Release a session that failed, ignoring anything it throws on the way."""
+        client, self.client = self.client, None
+        if client is not None:
+            try:
+                await client.disconnect()
+            except Exception:
+                _LOGGER.debug("Failed to release the printer connection", exc_info=True)
+        self._set_status("disconnected")
+
     async def _send(self, data: bytes, wait: bool = False, timeout: float = 3) -> bytes:
         if not self.connected:
             raise HomeAssistantError("Printer disconnected during operation")
@@ -446,7 +456,11 @@ class FicheroManager:
                     await self._send(bytes([0x10, 0xFF, 0xFE, 0x45]), True, 60)
                 self._set_status("connected")
             except Exception:
-                self._set_status("disconnected")
+                # A print that stops halfway leaves the printer mid-label with
+                # the GATT session still open and its proxy slot still taken.
+                # Reusing that session made every later attempt fail the same
+                # way, so the session goes and the next print reconnects.
+                await self._drop_session()
                 raise
 
     async def async_save_favorite(self, text: str) -> None:

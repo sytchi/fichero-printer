@@ -444,3 +444,38 @@ def test_print_without_a_length_uses_the_configured_one(manager_module, session)
     asyncio.run(manager.async_print("Salt", 1))
 
     assert captured["rows"] == 240
+
+
+def test_failed_print_releases_the_session(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 30, "density": 2}
+    connection = client()
+    manager.client = connection
+    manager._send = AsyncMock(
+        side_effect=manager_module.HomeAssistantError("Printer did not respond")
+    )
+    manager._send_chunked = AsyncMock()
+
+    with pytest.raises(manager_module.HomeAssistantError, match="did not respond"):
+        asyncio.run(manager.async_print("Salt", 1))
+
+    # Keeping the half printed session around made every later print fail too.
+    connection.disconnect.assert_awaited_once()
+    assert manager.client is None
+    assert manager.status == "disconnected"
+
+
+def test_successful_print_keeps_the_session(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 30, "density": 2}
+    connection = client()
+    manager.client = connection
+    manager._send = AsyncMock(return_value=bytes([0x00]))
+    manager._send_chunked = AsyncMock()
+    manager_module.render_text_raster = lambda *args, **kwargs: b""
+
+    asyncio.run(manager.async_print("Salt", 1))
+
+    connection.disconnect.assert_not_awaited()
+    assert manager.client is connection
+    assert manager.status == "connected"
