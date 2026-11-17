@@ -19,6 +19,8 @@ class FicheroPrinterCard extends HTMLElement {
     this._lengthMm = null;
     this._offsetMm = null;
     this._withDate = false;
+    this._withBarcode = false;
+    this._barcode = "";
     this._bold = true;
     this._date = this._localDate();
   }
@@ -165,6 +167,7 @@ class FicheroPrinterCard extends HTMLElement {
 
   _printData(text) {
     const data = { text, copies: this._copies, bold: this._bold };
+    if (this._withBarcode && this._barcode.trim()) data.barcode = this._barcode.trim();
     if (this._withDate) data.date = this._printedDate();
     if (this._withIcon && this._icon.trim()) {
       data.icon = this._icon.trim();
@@ -246,6 +249,10 @@ class FicheroPrinterCard extends HTMLElement {
           <label><input id="with-date" type="checkbox"> Add date</label>
           <input id="date" type="date">
           <label><input id="bold" type="checkbox" checked> Bold</label>
+        </div>
+        <div class="row">
+          <label><input id="with-barcode" type="checkbox"> Barcode</label>
+          <input id="barcode" type="text" inputmode="numeric" placeholder="EAN from the package, e.g. 5901234123457">
         </div>
         <div class="row">
           <label>Length <input id="length" type="number" min="10" max="100" step="1"> mm</label>
@@ -333,6 +340,19 @@ class FicheroPrinterCard extends HTMLElement {
       date.disabled = !this._withDate;
       this._schedulePreview();
     });
+    const barcode = root.getElementById("barcode");
+    barcode.addEventListener("input", (event) => {
+      this._barcode = event.target.value;
+      this._schedulePreview();
+    });
+    const withBarcode = root.getElementById("with-barcode");
+    withBarcode.addEventListener("change", (event) => {
+      this._withBarcode = event.target.checked;
+      barcode.disabled = !this._withBarcode;
+      this._schedulePreview();
+    });
+    barcode.disabled = true;
+
     this._restoreLayout();
     root.getElementById("text").value = this._text;
     const boldBox = root.getElementById("bold");
@@ -443,7 +463,7 @@ class FicheroPrinterCard extends HTMLElement {
     const preview = this.shadowRoot.getElementById("preview");
     const error = this.shadowRoot.getElementById("preview-error");
     const data = this._printData(this._text);
-    if (!data.artwork && !data.text.trim() && !data.date) {
+    if (!data.artwork && !data.barcode && !data.text.trim() && !data.date) {
       preview.hidden = true;
       error.hidden = true;
       return;
@@ -455,6 +475,7 @@ class FicheroPrinterCard extends HTMLElement {
       date: data.date || "",
       bold: data.bold,
     };
+    if (data.barcode) message.barcode = data.barcode;
     if (data.icon) {
       message.icon = data.icon;
       message.icon_side = data.icon_side;

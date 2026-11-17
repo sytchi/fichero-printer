@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from .artwork import to_printable
+from .barcode import encode as encode_barcode, module_dots
 
 PRINTHEAD_PX = 96
 DOTS_PER_MM = 8
@@ -25,6 +26,10 @@ ICON_SIDES = ("left", "right")
 DEFAULT_ICON_SIDE = "left"
 ARTWORK_MODES = ("icon", "full")
 DEFAULT_ARTWORK_MODE = "icon"
+# Bars shorter than three millimetres stop being read reliably, and the digits
+# under them need a font that is still legible at this resolution.
+MIN_BAR_DOTS = 24
+MIN_BARCODE_DIGIT_DOTS = 8
 
 # Pillow's built-in font only covers basic Latin: every accented character came
 # out as a box on the tape. The bundled DejaVu faces carry the accents and give
@@ -138,6 +143,7 @@ def render_label_image(
     artwork: bytes | None = None,
     artwork_mode: str = DEFAULT_ARTWORK_MODE,
     bold: bool = True,
+    barcode: str | None = None,
 ) -> Image.Image:
     """Lay the label out as it will be printed and return it as an image.
 
@@ -153,6 +159,8 @@ def render_label_image(
     printed as a square pictogram on the `icon_side` end of the label.
     `artwork` is a generated picture: in `icon` mode it takes the place of the
     pictogram, in `full` mode it is printed alone across the whole label.
+    `barcode` is an EAN-8 or EAN-13 copied off a product; it takes over the
+    label, with `text` printed above it only when the bars can stay readable.
     """
     # Pasted line breaks and repeated whitespace are ordinary word separators;
     # where the text breaks is decided by whatever gives the largest letters.
@@ -160,6 +168,12 @@ def render_label_image(
         raise ValueError(f"Artwork mode must be one of {', '.join(ARTWORK_MODES)}")
     margin_dots = max(0, int(margin_dots))
     offset_dots = int(offset_dots)
+    if barcode and str(barcode).strip():
+        # A barcode is the whole point of such a label, so it wins over a
+        # picture if somebody passes both.
+        return _render_barcode(
+            str(barcode), text, label_rows, margin_dots, offset_dots, bold
+        )
     if artwork is not None and artwork_mode == "full":
         return _render_full_artwork(artwork, label_rows, margin_dots, offset_dots)
 
@@ -267,6 +281,80 @@ def render_label_image(
     return canvas
 
 
+def _render_barcode(
+    code: str,
+    text: str,
+    label_rows: int,
+    margin_dots: int,
+    offset_dots: int,
+    bold: bool,
+) -> Image.Image:
+    """Print an EAN symbol with its digits, and a name above it if it fits."""
+    symbol = encode_barcode(code)
+    usable_height = PRINTHEAD_PX - 2 * margin_dots
+    usable_width = label_rows - 2 * margin_dots - abs(offset_dots)
+    if usable_height <= 0 or usable_width <= 0:
+        raise ValueError("Margins leave no room for the barcode")
+
+    dots = module_dots(symbol, usable_width)
+    width = symbol.width * dots
+
+    canvas = Image.new("1", (label_rows, PRINTHEAD_PX), 1)
+    draw = ImageDraw.Draw(canvas)
+
+    digit_font = _font(max(MIN_BARCODE_DIGIT_DOTS, min(14, usable_height // 5)))
+    digit_height = _height(draw, symbol.code, digit_font) + 2
+
+    caption = (text or "").strip()
+    caption_font = None
+    caption_height = 0
+    if caption:
+        caption_font = _font(max(8, min(16, usable_height // 4)), bold)
+        caption_height = _height(draw, caption, caption_font) + 2
+        if usable_height - digit_height - caption_height < MIN_BAR_DOTS:
+            # Short bars do not scan, so the name is what gives way, not them.
+            caption, caption_font, caption_height = "", None, 0
+
+    bar_height = usable_height - digit_height - caption_height
+    if bar_height < MIN_BAR_DOTS:
+        raise ValueError("Margins leave no room for readable bars")
+
+    left = margin_dots + (usable_width - width) // 2 + offset_dots
+    left = max(margin_dots, min(left, label_rows - margin_dots - width))
+    top = margin_dots + caption_height
+    # Guard bars run down past the others, level with the digits, which is what
+    # tells a scanner where the symbol starts and ends.
+    guard_extra = max(2, digit_height // 2)
+
+    for index, module in enumerate(symbol.modules):
+        if module != "1":
+            continue
+        extra = guard_extra if any(start <= index < end for start, end in symbol.guards) else 0
+        x = left + index * dots
+        draw.rectangle([x, top, x + dots - 1, top + bar_height - 1 + extra], fill=0)
+
+    for group in symbol.digits:
+        box = draw.textbbox((0, 0), group.text, font=digit_font)
+        span_left = left + group.start * dots
+        span_width = (group.end - group.start) * dots
+        draw.text(
+            (span_left + (span_width - (box[2] - box[0])) // 2 - box[0], top + bar_height + 1 - box[1]),
+            group.text,
+            font=digit_font,
+            fill=0,
+        )
+
+    if caption:
+        box = draw.textbbox((0, 0), caption, font=caption_font)
+        draw.text(
+            (left + (width - (box[2] - box[0])) // 2 - box[0], margin_dots - box[1]),
+            caption,
+            font=caption_font,
+            fill=0,
+        )
+    return canvas
+
+
 def _render_full_artwork(
     artwork: bytes, label_rows: int, margin_dots: int, offset_dots: int
 ) -> Image.Image:
@@ -295,11 +383,12 @@ def render_text_raster(
     artwork: bytes | None = None,
     artwork_mode: str = DEFAULT_ARTWORK_MODE,
     bold: bool = True,
+    barcode: str | None = None,
 ) -> bytes:
     """Render the label and pack it the way the printer expects it."""
     canvas = render_label_image(
         text, label_rows, margin_dots, offset_dots, max_lines, date, icon, icon_side,
-        artwork, artwork_mode, bold,
+        artwork, artwork_mode, bold, barcode,
     )
     # Printer raster is 96 pixels wide and one row per dot along label length.
     rotated = canvas.rotate(90, expand=True)
@@ -318,12 +407,13 @@ def render_preview_png(
     artwork: bytes | None = None,
     artwork_mode: str = DEFAULT_ARTWORK_MODE,
     bold: bool = True,
+    barcode: str | None = None,
     scale: int = PREVIEW_SCALE,
 ) -> bytes:
     """Render the same layout the printer gets, as a PNG for the dashboard."""
     canvas = render_label_image(
         text, label_rows, margin_dots, offset_dots, max_lines, date, icon, icon_side,
-        artwork, artwork_mode, bold,
+        artwork, artwork_mode, bold, barcode,
     )
     scale = max(1, int(scale))
     if scale > 1:

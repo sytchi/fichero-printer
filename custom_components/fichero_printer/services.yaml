@@ -95,6 +95,11 @@ print_label:
           max: 10
           step: 0.5
           mode: box
+    barcode:
+      name: Barcode (EAN)
+      description: EAN-13 or EAN-8 copied off a product; the bars take over the label and the text, if any, is printed above them.
+      selector:
+        text:
     bold:
       name: Bold
       description: Prints the text and the date in the bold face; leave it on unless the label needs a lighter look.

@@ -70,6 +70,7 @@ SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
         vol.Optional("artwork", default=""): cv.string,
         vol.Optional("artwork_mode", default=DEFAULT_ARTWORK_MODE): vol.In(ARTWORK_MODES),
         vol.Optional("bold", default=True): cv.boolean,
+        vol.Optional("barcode", default=""): cv.string,
     }
 )
 SERVICE_SAVE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
@@ -302,6 +303,7 @@ async def websocket_suggest_icon(hass: HomeAssistant, connection, msg: dict) -> 
             vol.Coerce(float), vol.Range(min=MIN_LABEL_LENGTH, max=MAX_LABEL_LENGTH)
         ),
         vol.Optional("bold", default=True): cv.boolean,
+        vol.Optional("barcode", default=""): cv.string,
     }
 )
 @websocket_api.async_response
@@ -327,6 +329,7 @@ async def websocket_preview(hass: HomeAssistant, connection, msg: dict) -> None:
                 artwork=base64.b64decode(msg["artwork"]) if msg["artwork"] else None,
                 artwork_mode=msg["artwork_mode"],
                 bold=msg["bold"],
+                barcode=msg["barcode"],
             )
         )
     except ValueError as err:
@@ -370,6 +373,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
             call.data["artwork_mode"],
             call.data.get("length_mm"),
             call.data["bold"],
+            call.data["barcode"],
         )
 
     async def handle_save(call: ServiceCall) -> None:

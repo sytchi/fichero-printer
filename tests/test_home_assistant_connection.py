@@ -366,6 +366,7 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
         artwork=None,
         artwork_mode="icon",
         bold=True,
+        barcode="",
     ):
         captured.update(
             text=text,
@@ -378,6 +379,7 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
             artwork=artwork,
             artwork_mode=artwork_mode,
             bold=bold,
+            barcode=barcode,
         )
         return b""
 
@@ -404,6 +406,7 @@ def test_print_converts_millimetres_to_dots(manager_module, session):
         "artwork": None,
         "artwork_mode": "icon",
         "bold": True,
+        "barcode": "",
     }
 
 
@@ -478,4 +481,35 @@ def test_successful_print_keeps_the_session(manager_module, session):
 
     connection.disconnect.assert_not_awaited()
     assert manager.client is connection
+    assert manager.status == "connected"
+
+
+def test_print_passes_the_barcode_to_the_renderer(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 60, "density": 2}
+    manager.client = client()
+    manager._send = AsyncMock(return_value=bytes([0x00]))
+    manager._send_chunked = AsyncMock()
+    captured = {}
+
+    def fake_render(text, rows, **kwargs):
+        captured.update(text=text, rows=rows, barcode=kwargs.get("barcode"))
+        return b""
+
+    manager_module.render_text_raster = fake_render
+    asyncio.run(manager.async_print("", 1, barcode="5901234123457"))
+
+    assert captured["barcode"] == "5901234123457"
+
+
+def test_print_with_only_a_barcode_is_allowed(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {"label_length": 60, "density": 2}
+    manager.client = client()
+    manager._send = AsyncMock(return_value=bytes([0x00]))
+    manager._send_chunked = AsyncMock()
+    manager_module.render_text_raster = lambda *args, **kwargs: b""
+
+    # Empty text with no date used to be refused; a barcode stands on its own.
+    asyncio.run(manager.async_print("", 1, barcode="96385074"))
     assert manager.status == "connected"

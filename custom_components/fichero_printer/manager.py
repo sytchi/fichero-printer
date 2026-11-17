@@ -409,11 +409,13 @@ class FicheroManager:
         artwork_mode: str = DEFAULT_ARTWORK_MODE,
         length_mm: float | None = None,
         bold: bool = True,
+        barcode: str = "",
     ) -> None:
         text = text.strip()
         date = date.strip()
         picture = base64.b64decode(artwork) if artwork else None
-        if picture is None and not text and not date:
+        barcode = (barcode or "").strip()
+        if picture is None and not barcode and not text and not date:
             raise HomeAssistantError("Label text cannot be empty")
         if not 1 <= copies <= 100:
             raise HomeAssistantError("Copies must be between 1 and 100")
@@ -438,6 +440,7 @@ class FicheroManager:
                     artwork=picture,
                     artwork_mode=artwork_mode,
                     bold=bold,
+                    barcode=barcode,
                 )
                 await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
                 await asyncio.sleep(0.1)

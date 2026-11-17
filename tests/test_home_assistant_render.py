@@ -423,3 +423,59 @@ def test_icon_and_text_never_overlap_with_an_offset():
             assert rows[-1] <= 240 - 1 - 8
             # Enough ink for both blocks means neither was clipped away.
             assert rows[-1] - rows[0] > icon_size
+
+
+def test_barcode_fills_the_label_and_keeps_quiet_zones():
+    raster = render.render_text_raster("", 480, margin_dots=8, barcode="5901234123457")
+    assert len(raster) == 480 * 12
+    rows = _ink_rows(raster, 480)
+    # The quiet zones are part of the symbol: no ink may reach the margins.
+    assert rows[0] >= 8
+    assert rows[-1] <= 480 - 1 - 8
+
+
+def test_barcode_prints_without_any_text():
+    # An empty label is normally rejected; a barcode is a label on its own.
+    raster = render.render_text_raster("", 300, barcode="96385074")
+    assert sum(bin(byte).count("1") for byte in raster) > 0
+
+
+def test_barcode_rejects_a_typo_rather_than_printing_it():
+    with pytest.raises(ValueError, match="Check digit"):
+        render.render_text_raster("", 480, barcode="5901234123450")
+
+
+def test_short_label_cannot_carry_an_ean13():
+    with pytest.raises(ValueError, match="needs at least"):
+        render.render_text_raster("", 160, barcode="5901234123457")
+
+
+def test_barcode_wins_over_artwork_when_both_are_given(monkeypatch):
+    monkeypatch.setattr(render, "to_printable", lambda *a, **k: (_ for _ in ()).throw(AssertionError("artwork used")))
+    render.render_text_raster("", 480, barcode="5901234123457", artwork=b"x", artwork_mode="full")
+
+
+def _read_modules(image, row):
+    """Read the bar pattern straight off the rendered label, like a scanner."""
+    pixels = [1 if image.getpixel((x, row)) == 0 else 0 for x in range(image.width)]
+    first = pixels.index(1)
+    last = len(pixels) - 1 - pixels[::-1].index(1)
+    # The symbol between its guards is exactly 95 modules wide.
+    module = (last - first + 1) / 95
+    return "".join(str(pixels[round(first + (index + 0.5) * module)]) for index in range(95))
+
+
+def test_rendered_bars_decode_back_to_the_same_code():
+    code = "5901234123457"
+    image = render.render_label_image("", 480, margin_dots=8, barcode=code)
+    expected = render.encode_barcode(code).modules.strip("0")
+    assert len(expected) == 95
+    # Read through the middle of the bars, where a scanner would look.
+    assert _read_modules(image, 40) == expected
+
+
+def test_digits_do_not_eat_into_the_bars():
+    image = render.render_label_image("", 480, margin_dots=8, barcode="5901234123457")
+    expected = render.encode_barcode("5901234123457").modules.strip("0")
+    # Same reading taken just above the digits must still be the clean pattern.
+    assert _read_modules(image, 60) == expected
