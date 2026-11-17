@@ -479,3 +479,23 @@ def test_digits_do_not_eat_into_the_bars():
     expected = render.encode_barcode("5901234123457").modules.strip("0")
     # Same reading taken just above the digits must still be the clean pattern.
     assert _read_modules(image, 60) == expected
+
+
+def test_ean13_fits_a_30mm_label_because_quiet_zones_are_its_own():
+    # 226 dots of symbol against 240 of tape: it only fits because the label
+    # margin is not charged twice on top of the quiet zones.
+    raster = render.render_text_raster("", 240, margin_dots=8, barcode="5903933922157")
+    assert len(raster) == 240 * 12
+
+
+def test_bars_on_a_short_label_still_decode():
+    code = "5903933922157"
+    image = render.render_label_image("", 240, margin_dots=8, barcode=code)
+    assert _read_modules(image, 40) == render.encode_barcode(code).modules.strip("0")
+
+
+def test_barcode_keeps_the_vertical_margin():
+    raster = render.render_text_raster("", 480, margin_dots=8, barcode="5901234123457")
+    columns = _ink_columns(raster, 480)
+    assert columns[0] >= 8
+    assert columns[-1] <= render.PRINTHEAD_PX - 1 - 8

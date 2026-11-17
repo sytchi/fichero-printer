@@ -292,7 +292,11 @@ def _render_barcode(
     """Print an EAN symbol with its digits, and a name above it if it fits."""
     symbol = encode_barcode(code)
     usable_height = PRINTHEAD_PX - 2 * margin_dots
-    usable_width = label_rows - 2 * margin_dots - abs(offset_dots)
+    # The horizontal margin is deliberately left out: an EAN carries its own
+    # quiet zones (11 modules before the bars, 7 after them), so adding the
+    # label margin on top only costs width that a short tape does not have.
+    # The vertical margin stays, because nothing in the symbol replaces it.
+    usable_width = label_rows - abs(offset_dots)
     if usable_height <= 0 or usable_width <= 0:
         raise ValueError("Margins leave no room for the barcode")
 
@@ -319,8 +323,8 @@ def _render_barcode(
     if bar_height < MIN_BAR_DOTS:
         raise ValueError("Margins leave no room for readable bars")
 
-    left = margin_dots + (usable_width - width) // 2 + offset_dots
-    left = max(margin_dots, min(left, label_rows - margin_dots - width))
+    left = (usable_width - width) // 2 + offset_dots
+    left = max(0, min(left, label_rows - width))
     top = margin_dots + caption_height
     # Guard bars run down past the others, level with the digits, which is what
     # tells a scanner where the symbol starts and ends.
